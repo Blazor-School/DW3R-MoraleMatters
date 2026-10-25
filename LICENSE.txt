@@ -1,0 +1,5 @@
+Morale Matters original source is provided for the user's local use and modification.
+No license or ownership claim is made over game content, UE4SS, or other installed mods.
+
+MinHook is distributed under its own license, included in MinHook-LICENSE.txt in the
+release package and vendor/minhook/LICENSE.txt in the source directory.
