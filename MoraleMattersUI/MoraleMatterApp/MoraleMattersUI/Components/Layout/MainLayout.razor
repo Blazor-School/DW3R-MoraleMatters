@@ -1,0 +1,55 @@
+﻿@inherits LayoutComponentBase
+
+@if (OperatingSystem.IsWindows())
+{
+    <div style="display: flex; justify-content: flex-end;">
+        <RoarButton Appearance="ButtonAppearance.Plain" Size="ButtonSize.S" aria-label="Minimize" @onclick='() => WindowCommand("minimize")'>
+            <RoarIcon Name="minus" />
+        </RoarButton>
+        <RoarButton Appearance="ButtonAppearance.Plain" Size="ButtonSize.S" aria-label="Maximize or restore" @onclick='() => WindowCommand("maximize")'>
+            <RoarIcon Name="window-maximize" Variant="FontAwesomeVariant.Regular" />
+        </RoarButton>
+        <RoarButton Appearance="ButtonAppearance.Plain" Size="ButtonSize.S" Variant="ButtonVariant.Danger" aria-label="Close" @onclick='() => WindowCommand("close")'>
+            <RoarIcon Name="xmark" />
+        </RoarButton>
+    </div>
+}
+
+@Body
+
+@code {
+    private static Task WindowCommand(string command)
+    {
+        return MainThread.InvokeOnMainThreadAsync(() =>
+        {
+#if WINDOWS
+            var window = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault()?.Handler?.PlatformView as Microsoft.UI.Xaml.Window;
+
+            if (window?.AppWindow.Presenter is not Microsoft.UI.Windowing.OverlappedPresenter presenter)
+            {
+                return;
+            }
+
+            switch (command)
+            {
+                case "minimize":
+                    presenter.Minimize();
+                    break;
+                case "maximize":
+                    if (presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Maximized)
+                    {
+                        presenter.Restore();
+                    }
+                    else
+                    {
+                        presenter.Maximize();
+                    }
+                    break;
+                case "close":
+                    window.Close();
+                    break;
+            }
+#endif
+        });
+    }
+}

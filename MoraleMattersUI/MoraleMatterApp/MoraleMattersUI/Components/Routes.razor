@@ -1,0 +1,56 @@
+﻿@using RoarUI.Theme
+@inject ThemeService ThemeService
+
+<GoRoar>
+    <Router AppAssembly="typeof(MauiProgram).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+        <Found Context="routeData">
+            <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+    </Router>
+</GoRoar>
+
+@code {
+    protected override void OnInitialized()
+    {
+        var theme = new RoarTheme();
+        var brand = theme.Token.Variants[RoarVariant.Brand];
+        var color = theme.Token.Color;
+
+        // Brand palette: lightest to darkest.
+        brand.Color95 = "#F7F2FC";
+        brand.Color90 = "#EDE1F8";
+        brand.Color80 = "#D8BEEF";
+        brand.Color70 = "#BD96E3";
+        brand.Color60 = "#9C6BD4";
+        brand.Color50 = "#7B3CC3";
+        brand.Color40 = "#63309C";
+        brand.Color30 = "#4A2475";
+        brand.Color20 = "#32184E";
+        brand.Color10 = "#1F0F31";
+        brand.Color05 = "#140A20";
+
+        brand.Color = "var(--wa-color-brand-50)";
+        brand.On = "#FFFFFF";
+
+        // Backgrounds.
+        brand.Light.FillQuiet = "var(--wa-color-brand-95)";
+        brand.Light.FillNormal = "var(--wa-color-brand-90)";
+        brand.Light.FillLoud = "var(--wa-color-brand-50)";
+
+        // Borders.
+        brand.Light.BorderQuiet = "var(--wa-color-brand-90)";
+        brand.Light.BorderNormal = "var(--wa-color-brand-80)";
+        brand.Light.BorderLoud = "var(--wa-color-brand-60)";
+
+        // Text and icons on the corresponding backgrounds.
+        brand.Light.OnQuiet = "var(--wa-color-brand-40)";
+        brand.Light.OnNormal = "var(--wa-color-brand-30)";
+        brand.Light.OnLoud = "#FFFFFF";
+
+        theme.Token.Light.TextLink = "var(--wa-color-brand-40)";
+        theme.Token.Light.Focus = "var(--wa-color-brand-50)";
+
+        ThemeService.LoadTheme(theme);
+    }
+}
