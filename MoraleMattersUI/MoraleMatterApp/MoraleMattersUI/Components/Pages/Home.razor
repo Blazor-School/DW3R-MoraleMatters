@@ -1,3 +1,138 @@
 ﻿@page "/"
+@inject ThemeService ThemeService
+@inject ModService ModService
+@inject IFolderPicker NativeFolderPicker
+@inject IServiceProvider ServiceProvider
+@implements IDisposable
 
-<RoarButton Variant="ButtonVariant.Brand">Hello</RoarButton>
+<main class="wa-stack content-padding">
+    <EditForm EditContext="EditContext">
+        <RoarCard>
+            <DataAnnotationsValidator />
+            <div class="wa-cluster wa-flex-nowrap">
+                <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="folder" />
+                <label>Game folder</label>
+                <RoarInputText style="flex-grow: 1" @bind-Value="GameFolderForm.GamePath" ReadOnly />
+                <RoarButton @onclick="BrowseGameFolderAsync" Variant="ButtonVariant.Brand">Browse</RoarButton>
+            </div>
+            <ValidationMessage For="() => GameFolderForm.GamePath" />
+        </RoarCard>
+    </EditForm>
+    <div class="wa-flank:end wa-align-items-start" style="--flank-size: 30rem;">
+        <RoarCard>
+            <div class="wa-flank">
+                <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="gear" />
+                <div class="wa-heading-xl">Mod Settings</div>
+            </div>
+        </RoarCard>
+        <div class="wa-stack">
+            <RoarCard Orientation="CardOrientation.Vertical">
+                <div class="wa-flank">
+                    <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="download" />
+                    <div class="wa-split">
+                        <div class="wa-heading-xl">Mod Installation</div>
+                        <RoarBadge Variant="BadgeVariant.Neutral">Not installed</RoarBadge>
+                    </div>
+                </div>
+                <div class="wa-body">Select mod version</div>
+                <RoarSelect @bind-Value="SelectedModAssetVersion" Placeholder="Select mod version">
+                    @foreach (var asset in ModAssets)
+                    {
+                        <RoarOption Value="@asset.Version.ToString()">@asset.Version</RoarOption>
+                    }
+                </RoarSelect>
+
+                @if (SelectedModAsset is not null)
+                {
+                    <div class="wa-body">Changelog</div>
+                    <RoarCard>
+                        @SelectedModAsset.NotesMarkdown
+                    </RoarCard>
+                }
+
+                <RoarDivider />
+
+                @if (LocalModVersion == SelectedModAssetVersion)
+                {
+                    <RoarButton class="full-width" Disabled Variant="ButtonVariant.Neutral">Installed</RoarButton>
+                }
+                else
+                {
+                    <RoarButton class="full-width" Variant="ButtonVariant.Brand">Install</RoarButton>
+                }
+            </RoarCard>
+
+            <RoarCard>
+                <div class="wa-flank">
+                    <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="circle-info" />
+                    <div class="wa-body-m">Keep the game closed during installion.</div>
+                </div>
+            </RoarCard>
+        </div>
+    </div>
+</main>
+
+@code {
+    public GameFolderForm GameFolderForm { get; set; } = new();
+    public EditContext EditContext = default!;
+    public string LocalModVersion { get; set; } = "";
+    public IDisposable? GameFolderFormValidator { get; set; }
+    public List<VelopackAsset> ModAssets { get; set; } = [];
+    public string? SelectedModAssetVersion { get; set; }
+    public VelopackAsset? SelectedModAsset => ModAssets.FirstOrDefault(x => x.Version.ToString() == SelectedModAssetVersion);
+
+    protected override async Task OnInitializedAsync()
+    {
+        GameFolderForm.GamePath = Preferences.Default.Get(nameof(GameFolderForm.GamePath), "");
+        EditContext = new EditContext(GameFolderForm);
+        GameFolderFormValidator = EditContext.EnableDataAnnotationsValidation(ServiceProvider);
+        //await UpdateModInstallationAsync();
+    }
+
+    public async Task BrowseGameFolderAsync()
+    {
+        var result = await MainThread.InvokeOnMainThreadAsync(() => NativeFolderPicker.PickAsync());
+
+        if (result.IsSuccessful)
+        {
+            GameFolderForm.GamePath = result.Folder.Path;
+            Preferences.Default.Set(nameof(GameFolderForm.GamePath), GameFolderForm.GamePath);
+            await UpdateModInstallationAsync();
+        }
+    }
+
+    private async Task UpdateModInstallationAsync()
+    {
+        if (Application.Current is App app)
+        {
+            if (!EditContext.Validate())
+            {
+                app.TitleBar.Subtitle = "Game not found.";
+            }
+            else
+            {
+                LocalModVersion = await ModService.GetLocalModVersionAsync(GameFolderForm.GamePath);
+                ModAssets = await ModService.GetModReleasesAsync();
+
+                if (ModAssets.Count > 0)
+                {
+                    SelectedModAssetVersion = ModAssets.First().Version.ToString();
+                }
+
+                if (string.IsNullOrEmpty(LocalModVersion))
+                {
+                    app.TitleBar.Subtitle = "Mod not installed";
+                }
+                else
+                {
+                    app.TitleBar.Subtitle = $"Mod version: {LocalModVersion}";
+                }
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        GameFolderFormValidator?.Dispose();
+    }
+}

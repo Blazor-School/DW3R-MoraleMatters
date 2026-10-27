@@ -7,17 +7,11 @@ public partial class App : Application
         InitializeComponent();
     }
 
-    protected override Window CreateWindow(IActivationState? activationState)
+    protected override Window CreateWindow(IActivationState? activationState) => new(new MainPage())
     {
-        var window = new Window(new MainPage())
-        {
-            Title = "MoraleMattersUI",
-            TitleBar = new TitleBar()
-            {
-                IsVisible = false
-            }
-        };
+        TitleBar = (TitleBar)Resources["AppTitleBar"]
+    };
 
-        return window;
-    }
+    private async void OpenRoarUI(object? sender, TappedEventArgs e) => await Launcher.Default.OpenAsync("https://www.nuget.org/packages/RoarUI");
+    public TitleBar TitleBar => (TitleBar)Resources["AppTitleBar"];
 }

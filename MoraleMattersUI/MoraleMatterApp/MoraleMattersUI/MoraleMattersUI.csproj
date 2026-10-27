@@ -51,9 +51,10 @@
 
     <ItemGroup>
         <!-- App Icon -->
-        <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+		<MauiImage Include="Resources\AppIcon\*" Exclude="Resources\AppIcon\appicon.png" />
+		<MauiIcon Include="Resources\AppIcon\appicon.png" BaseSize="256,256" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'" />
 
-        <!-- Splash Screen -->
+		<!-- Splash Screen -->
         <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
 
         <!-- Images -->
@@ -71,8 +72,10 @@
         <PackageReference Include="CommunityToolkit.Maui" Version="15.0.1" />
         <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.120" />
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.120" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.13" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.14" />
+        <PackageReference Include="Roar.DependencyInjection" Version="2.2.0" />
         <PackageReference Include="RoarUI" Version="10.0.4" />
+        <PackageReference Include="Velopack" Version="1.2.161" />
     </ItemGroup>
 
 </Project>

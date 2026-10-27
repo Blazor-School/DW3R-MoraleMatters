@@ -11,7 +11,19 @@
                 please refer to the documentation:
                 https://go.microsoft.com/fwlink/?linkid=2282329
             -->
+            <TitleBar x:Key="AppTitleBar" Icon="morale_matters_icon.png" Title="Morale Matters UI" Subtitle="Detecting mod..." HeightRequest="48" BackgroundColor="#17141E" ForegroundColor="#F4F0F8">
+                <TitleBar.TrailingContent>
+                    <HorizontalStackLayout Spacing="6" Margin="12,0,16,0" VerticalOptions="Center">
+                        <HorizontalStackLayout.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OpenRoarUI" />
+                        </HorizontalStackLayout.GestureRecognizers>
 
+                        <Label Text="Built with RoarUI" TextColor="#CC91F3" TextDecorations="Underline" FontSize="12" VerticalOptions="Center" InputTransparent="True" />
+
+                        <Image Source="logo_roarui.png" WidthRequest="36" HeightRequest="36" Aspect="AspectFit" VerticalOptions="Center" InputTransparent="True" />
+                    </HorizontalStackLayout>
+                </TitleBar.TrailingContent>
+            </TitleBar>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
