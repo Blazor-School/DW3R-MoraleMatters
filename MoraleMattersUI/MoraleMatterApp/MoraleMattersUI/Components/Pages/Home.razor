@@ -6,7 +6,7 @@
 @implements IDisposable
 
 <main class="wa-stack content-padding">
-    <EditForm EditContext="EditContext">
+    <EditForm EditContext="GameFolderEditContext">
         <RoarCard>
             <DataAnnotationsValidator />
             <div class="wa-cluster wa-flex-nowrap">
@@ -50,7 +50,17 @@
                     <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="download" />
                     <div class="wa-split">
                         <div class="wa-heading-xl">Mod Installation</div>
-                        <RoarBadge Variant="BadgeVariant.Neutral">Not installed</RoarBadge>
+
+                        @if (string.IsNullOrEmpty(LocalModVersion))
+                        {
+                            <RoarBadge Variant="BadgeVariant.Neutral">Not installed</RoarBadge>
+                        }
+
+                        @if (!string.IsNullOrEmpty(LocalModVersion))
+                        {
+                            <RoarBadge Variant="BadgeVariant.Brand">Installed: @LocalModVersion</RoarBadge>
+                        }
+
                     </div>
                 </div>
                 <div class="wa-body">Select mod version</div>
@@ -99,19 +109,21 @@
 
 @code {
     public GameFolderForm GameFolderForm { get; set; } = new();
-    public EditContext EditContext = default!;
+    public EditContext GameFolderEditContext { get; set; } = default!;
     public string LocalModVersion { get; set; } = "";
     public IDisposable? GameFolderFormValidator { get; set; }
     public List<VelopackAsset> ModAssets { get; set; } = [];
     public string? SelectedModAssetVersion { get; set; }
     public VelopackAsset? SelectedModAsset => ModAssets.FirstOrDefault(x => x.Version.ToString() == SelectedModAssetVersion);
     public bool InstallLoading { get; set; } = false;
+    public ModSettingForm SettingForm { get; set; } = new();
+    public EditContext SettingEditContext { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
         GameFolderForm.GamePath = Preferences.Default.Get(nameof(GameFolderForm.GamePath), "");
-        EditContext = new EditContext(GameFolderForm);
-        GameFolderFormValidator = EditContext.EnableDataAnnotationsValidation(ServiceProvider);
+        GameFolderEditContext = new EditContext(GameFolderForm);
+        GameFolderFormValidator = GameFolderEditContext.EnableDataAnnotationsValidation(ServiceProvider);
         await UpdateModInstallationAsync();
     }
 
@@ -131,7 +143,7 @@
     {
         if (Application.Current is App app)
         {
-            if (!EditContext.Validate())
+            if (!GameFolderEditContext.Validate())
             {
                 app.TitleBar.Subtitle = "Game not found.";
             }
