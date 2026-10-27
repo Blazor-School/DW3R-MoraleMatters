@@ -24,6 +24,25 @@
                 <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="gear" />
                 <div class="wa-heading-xl">Mod Settings</div>
             </div>
+
+            @if (string.IsNullOrEmpty(LocalModVersion))
+            {
+                <div class="wa-stack wa-text-center wa-align-items-center wa-justify-content-center wa-gap-l" style="min-height: 40rem;">
+                    <RoarIcon Name="sliders" class="wa-border-radius-l" style="font-size: 3rem;" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" />
+
+                    <div class="wa-heading-l">Install MoraleMatters to get started</div>
+
+                    <div class="wa-body">
+                        <span>Choose a version in the panel on the right.</span>
+                        <p>Your mod settings will appear here after installation.</p>
+                    </div>
+
+                    <div class="wa-cluster wa-justify-content-center">
+                        <RoarIcon Size="@IconSize.L" Name="lock" />
+                        <span>Settings unavailable until the mod is installed.</span>
+                    </div>
+                </div>
+            }
         </RoarCard>
         <div class="wa-stack">
             <RoarCard Orientation="CardOrientation.Vertical">
@@ -58,14 +77,20 @@
                 }
                 else
                 {
-                    <RoarButton class="full-width" Variant="ButtonVariant.Brand">Install</RoarButton>
+                    <RoarButton class="full-width" Variant="ButtonVariant.Brand" @onclick="DownloadAndInstallMod" Loading="@InstallLoading">Install</RoarButton>
                 }
             </RoarCard>
 
-            <RoarCard>
-                <div class="wa-flank">
-                    <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="circle-info" />
-                    <div class="wa-body-m">Keep the game closed during installion.</div>
+            <RoarCard Orientation="CardOrientation.Vertical">
+                <div class="wa-stack">
+                    <div class="wa-flank">
+                        <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Warning].Color" Name="circle-info" />
+                        <div class="wa-body-m">Keep the game closed during installion.</div>
+                    </div>
+                    <div class="wa-flank">
+                        <img src="morale_matters_icon.png" alt="MoraleMatters" width="32" height="32" />
+                        <div class="wa-body-m">UI version: @AppInfo.Current.VersionString</div>
+                    </div>
                 </div>
             </RoarCard>
         </div>
@@ -80,13 +105,14 @@
     public List<VelopackAsset> ModAssets { get; set; } = [];
     public string? SelectedModAssetVersion { get; set; }
     public VelopackAsset? SelectedModAsset => ModAssets.FirstOrDefault(x => x.Version.ToString() == SelectedModAssetVersion);
+    public bool InstallLoading { get; set; } = false;
 
     protected override async Task OnInitializedAsync()
     {
         GameFolderForm.GamePath = Preferences.Default.Get(nameof(GameFolderForm.GamePath), "");
         EditContext = new EditContext(GameFolderForm);
         GameFolderFormValidator = EditContext.EnableDataAnnotationsValidation(ServiceProvider);
-        //await UpdateModInstallationAsync();
+        await UpdateModInstallationAsync();
     }
 
     public async Task BrowseGameFolderAsync()
@@ -114,7 +140,7 @@
                 LocalModVersion = await ModService.GetLocalModVersionAsync(GameFolderForm.GamePath);
                 ModAssets = await ModService.GetModReleasesAsync();
 
-                if (ModAssets.Count > 0)
+                if (ModAssets.Count > 0 && string.IsNullOrEmpty(SelectedModAssetVersion))
                 {
                     SelectedModAssetVersion = ModAssets.First().Version.ToString();
                 }
@@ -129,6 +155,14 @@
                 }
             }
         }
+    }
+
+    public async Task DownloadAndInstallMod()
+    {
+        InstallLoading = true;
+        await ModService.InstallModAsync(GameFolderForm.GamePath, SelectedModAsset);
+        await UpdateModInstallationAsync();
+        InstallLoading = false;
     }
 
     public void Dispose()

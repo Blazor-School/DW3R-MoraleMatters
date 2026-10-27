@@ -30,13 +30,13 @@
         <MauiXamlInflator>SourceGen</MauiXamlInflator>
 
         <!-- Display name -->
-        <ApplicationTitle>MoraleMattersUI</ApplicationTitle>
+        <ApplicationTitle>Morale Matters UI</ApplicationTitle>
 
         <!-- App Identifier -->
-        <ApplicationId>com.companyname.moralemattersui</ApplicationId>
+        <ApplicationId>com.blazor-innovations.moralemattersui</ApplicationId>
 
         <!-- Versions -->
-        <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+        <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
         <ApplicationVersion>1</ApplicationVersion>
 
         <!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
