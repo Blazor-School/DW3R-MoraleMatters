@@ -43,6 +43,330 @@
                     </div>
                 </div>
             }
+            else
+            {
+                <EditForm EditContext="SettingEditContext" class="wa-stack">
+                    <div class="wa-stack" style="margin-top: 1rem;">
+                        <RoarDetails>
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
+                                    <RoarIcon Name="handshake" />
+                                    Morale settings
+                                </div>
+                                <div class="wa-body-s">The higher the morale, the more effective the unit's combat abilities. Affect both allies and enemies.</div>
+                            </div>
+                            <div class="wa-stack">
+                                <RoarSwitch @bind-Value="SettingForm.CombatEnabled" Hint="Scale ordinary combat damage and native AI attack waits according to corps morale.">Combat scaling</RoarSwitch>
+                                <div style="overflow-x: auto;">
+                                    <table class="table-input">
+                                        <caption class="wa-visually-hidden">Combat scaling by morale tier</caption>
+                                        <thead>
+                                            <tr>
+                                                <th id="combat-tier-header" scope="col" tabindex="0">Morale tier</th>
+                                                <th id="combat-points-header" scope="col" tabindex="0">Points</th>
+                                                <th id="combat-damage-dealt-header" scope="col" tabindex="0">Damage dealt</th>
+                                                <th id="combat-damage-taken-header" scope="col" tabindex="0">Damage taken</th>
+                                                <th id="combat-attack-frequency-header" scope="col" tabindex="0">Attack frequency</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <th scope="row">Very low</th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryLowMorale" Label="Very Low Morale" step="any" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryLowDamageDealt" Label="Very Low Damage Dealt" step="0.05" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryLowDamageTaken" Label="Very Low Damage Taken" step="0.05" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryLowAttackFrequency" Label="Very Low Attack Frequency" step="0.05" />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Low</th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatLowMorale" Label="Low Morale" step="any" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatLowDamageDealt" Label="Low Damage Dealt" step="0.05" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatLowDamageTaken" Label="Low Damage Taken" step="0.05" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatLowAttackFrequency" Label="Low Attack Frequency" step="0.05" />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Normal</th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatReferenceMorale" Label="Reference Morale" step="any" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatReferenceDamageDealt" Label="Reference Damage Dealt" step="0.05" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatReferenceDamageTaken" Label="Reference Damage Taken" step="0.05" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatReferenceAttackFrequency" Label="Reference Attack Frequency" step="0.05" />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">High</th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatHighMorale" Label="High Morale" step="any" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatHighDamageDealt" Label="High Damage Dealt" step="0.05" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatHighDamageTaken" Label="High Damage Taken" step="0.05" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatHighAttackFrequency" Label="High Attack Frequency" step="0.05" />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">Very high</th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryHighMorale" Label="Very High Morale" step="any" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryHighDamageDealt" Label="Very High Damage Dealt" step="0.05" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryHighDamageTaken" Label="Very High Damage Taken" step="0.05" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryHighAttackFrequency" Label="Very High Attack Frequency" step="0.05" />
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <RoarTooltip For="combat-tier-header">The five combat scaling tiers, from very low to very high morale.</RoarTooltip>
+                                    <RoarTooltip For="combat-points-header">Native morale points for each scaling anchor. Effects interpolate between anchors.</RoarTooltip>
+                                    <RoarTooltip For="combat-damage-dealt-header">Outgoing damage multiplier. 1 means normal damage; 2 doubles the coefficient.</RoarTooltip>
+                                    <RoarTooltip For="combat-damage-taken-header">Incoming damage multiplier. 1 means normal damage; 0.5 halves the coefficient.</RoarTooltip>
+                                    <RoarTooltip For="combat-attack-frequency-header">Native AI retry-wait frequency factor. 2 halves the affected waits without speeding up animations.</RoarTooltip>
+                                </div>
+                                <RoarSlider @bind-Value="SettingForm.CombatNamedOfficerStrength" Hint="Strength of combat scaling and native AI profile shifts for named officers" Min="0" Max="1" Label="Named officer effect strength" Step="0.01" WithTooltip>
+                                    <span slot="@SliderSlot.Reference">Neutral</span>
+                                    <span slot="@SliderSlot.Reference">Full effect</span>
+                                </RoarSlider>
+                                <h3 class="wa-heading-s">Casualty morale penalties</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.CasualtiesEnabled" Hint="Use configured corps morale losses for confirmed casualties, replacing the corresponding native penalty.">Casualty morale penalties</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.CasualtiesSoldier" Hint="Corps morale points lost per ordinary soldier killed." Label="Soldier" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.CasualtiesElite" Hint="Corps morale points lost per elite soldier killed." Label="Elite" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.CasualtiesCaptain" Hint="Corps morale points lost when a generic group captain is defeated." Label="Captain" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.CasualtiesSubordinateOfficer" Hint="Corps morale points lost when a subordinate named officer is defeated; corps commander defeat keeps its native outcome." Label="Subordinate Officer" step="any" />
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Summary="AI &amp; morale behavior">
+                            <div class="wa-stack">
+                                <p class="wa-body-s">Decision profiles, formations, regrouping, panic, recovery and nearby leaders.</p>
+                                <h3 class="wa-heading-s">AI decision profiles</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.BehaviorEnabled" Hint="Enable the AI and morale behavior features below, including phased regrouping.">Morale-driven AI behavior</RoarSwitch>
+                                    <RoarSwitch @bind-Value="SettingForm.BehaviorAIProfiles" Hint="Let morale shift native AI decision profiles, affecting aggression, guarding and supported evasion.">AI decision profiles</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorLowMoraleProfileShift" Hint="Native AI profile shift at 100 morale; profiles are unchanged at 400 morale." Label="Low Morale Profile Shift" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorHighMoraleProfileShift" Hint="Native AI profile shift at 800 morale; intermediate morale values interpolate." Label="High Morale Profile Shift" step="any" />
+                                </div>
+                                <h3 class="wa-heading-s">Formation spacing</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.BehaviorFormationCohesion" Hint="Change infantry formation spacing with morale while keeping native navigation and strategic orders.">Morale-based formation spacing</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorLowMoraleFormationScale" Hint="Formation spacing multiplier at 100 morale; 1.70 spreads troops to 170% of normal spacing." Label="Low Morale Formation Scale" step="0.05" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorHighMoraleFormationScale" Hint="Formation spacing multiplier at 800 morale; 0.65 tightens spacing to 65% of normal." Label="High Morale Formation Scale" step="0.05" />
+                                </div>
+                                <h3 class="wa-heading-s">Infantry regrouping</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.BehaviorLocalRegroup" Hint="Allow eligible ordinary infantry to regroup temporarily when morale is low or defeat shock applies.">Infantry regrouping</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorRegroupBelowPercent" Hint="Corps morale percentage at or below which ordinary infantry can start regrouping." Label="Regroup Below Percent" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorRegroupRecoverPercent" Hint="Corps morale percentage at which regrouping ends early." Label="Regroup Recover Percent" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorRegroupSeconds" Hint="Total regroup duration in battle seconds, including fall-back, reform and rejoin phases when enabled." Label="Regroup Seconds" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorRegroupCooldownSeconds" Hint="Battle seconds after the configured regroup duration before another regroup can begin." Label="Regroup Cooldown Seconds" step="any" />
+                                    <RoarSwitch @bind-Value="SettingForm.BattlefieldPhasedRegroup" Hint="Split local infantry regrouping into fall-back, reform and rejoin phases; local regrouping must also be enabled.">Fall back, reform and rejoin</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldReformFormationScale" Hint="Formation spacing multiplier during the reform phase; 0.45 contracts spacing to 45% of normal." Label="Reform Formation Scale" step="0.05" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldWithdrawalDistanceMetres" Hint="Maximum local formation shift toward a nearby living commander during phased regrouping, in metres." Label="Withdrawal Distance Metres" step="any" />
+                                </div>
+                                <h3 class="wa-heading-s">Defeat panic</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.BehaviorDefeatPanic" Hint="Apply capped extra morale loss and temporary shock after a nearby subordinate leader is genuinely defeated.">Panic after nearby defeats</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorPanicRadiusMetres" Hint="Distance in metres from the defeated subordinate leader within which surviving same-corps groups can be shocked." Label="Panic Radius Metres" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorPanicMoraleLoss" Hint="Extra corps morale loss at reference morale before confidence, commander protection and the panic cap." Label="Panic Morale Loss" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorPanicWindowSeconds" Hint="Battle seconds in one per-corps budget window for additional defeat-panic losses." Label="Panic Window Seconds" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorPanicWindowCap" Hint="Maximum additional morale points a corps can lose to defeat panic within one budget window." Label="Panic Window Cap" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorPanicShockSeconds" Hint="Base defeat-shock duration in battle seconds before morale and commander protection adjust it." Label="Panic Shock Seconds" step="any" />
+                                </div>
+                                <h3 class="wa-heading-s">Morale recovery</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.BehaviorMoraleRecovery" Hint="Restore permanent base morale while the entire corps is out of simulated combat.">Passive morale recovery</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorRecoveryPerSecond" Hint="Base morale points recovered per battle second before morale confidence and commander leadership adjust the rate." Label="Recovery Per Second" step="0.1" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorRecoveryCeiling" Hint="Base morale point ceiling for passive recovery; 400 is approximately 45% on the HUD." Label="Recovery Ceiling" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorRecoveryDelaySeconds" Hint="Battle seconds the entire corps must stay out of combat before passive recovery starts." Label="Recovery Delay Seconds" step="any" />
+                                </div>
+                                <h3 class="wa-heading-s">Commander leadership</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.BehaviorCommanderLeadership" Hint="Let proximity to a living corps commander reduce panic, stabilize spacing and improve recovery.">Commander leadership</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorCommanderRadiusMetres" Hint="Distance in metres within which eligible groups count as near their living corps commander." Label="Commander Radius Metres" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorCommanderRecoveryMultiplier" Hint="Recovery multiplier when all eligible groups are near the commander; with none nearby, the multiplier is 0.5." Label="Commander Recovery Multiplier" step="0.1" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BehaviorCommanderPanicMultiplier" Hint="Multiplier for nearby groups&#39; defeat shock and their contribution to panic loss; 0.5 halves the affected amount." Label="Commander Panic Multiplier" step="0.1" />
+                                </div>
+                                <h3 class="wa-heading-s">Enemy corps proximity</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.EnemyProximityEnabled" Hint="Give temporary morale to enemy corps whose living corps leaders are close to one another.">Enemy corps proximity support</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.EnemyProximityRadiusMetres" Hint="Maximum distance in metres between two living leaders of different enemy corps for mutual support." Label="Radius Metres" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.EnemyProximityMoraleBonus" Hint="Temporary morale points while another qualifying enemy corps leader is nearby; extra neighbours do not stack." Label="Morale Bonus" step="any" />
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Summary="Item drops">
+                            <div class="wa-stack">
+                                <p class="wa-body-s">Random drops from defeated enemy infantry and captains.</p>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.DropsEnabled" Hint="Use the configured random-drop combo requirement and meat bun chance for eligible enemy infantry and captains.">Custom random drops</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.DropsComboHits" Hint="Minimum combo hits on the defeated unit before its random item drop can occur." Label="Minimum combo hits" step="1" />
+                                    <RoarInputNumber @bind-Value="SettingForm.DropsMeatBunPercent" Hint="Chance of a small meat bun for the random drop; the remaining chance is arrows. Fixed drops keep their native rules." Label="Meat bun chance (%)" step="1" />
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Summary="Allied support">
+                            <div class="wa-stack">
+                                <p class="wa-body-s">Temporary morale and healing when you approach an allied officer.</p>
+                                <h3 class="wa-heading-s">Rally and healing</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.SupportEnabled" Hint="Let encountering an allied officer grant temporary corps morale and restore that officer&#39;s health.">Allied support</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.SupportEncounterRadiusMetres" Hint="Enter this distance in metres from an allied officer to trigger an eligible support encounter." Label="Encounter radius (m)" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.SupportExitRadiusMetres" Hint="Move beyond this distance in metres to rearm the encounter; active bonuses and healing cooldowns still apply." Label="Rearm distance (m)" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.SupportMoraleBonus" Hint="Temporary morale points granted to the allied officer&#39;s corps; an active support bonus cannot stack or refresh." Label="Morale bonus (points)" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.SupportDurationSeconds" Hint="Battle seconds the temporary support morale bonus lasts." Label="Bonus duration (s)" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.SupportHealFraction" Hint="Fraction of the allied officer&#39;s maximum health restored on an eligible encounter; 0.5 means 50%." Label="Healing fraction" step="0.1" />
+                                    <RoarInputNumber @bind-Value="SettingForm.SupportHealCooldownSeconds" Hint="Battle seconds before the same officer can receive another successful support heal." Label="Healing cooldown (s)" step="any" />
+                                </div>
+                                <h3 class="wa-heading-s">Support popups</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarInputText @bind-Value="SettingForm.SupportMoraleText" Hint="In-game popup text shown above an allied officer when a support morale bonus is granted." Label="Morale Text" />
+                                    <RoarInputText @bind-Value="SettingForm.SupportHealText" Hint="In-game popup text shown above an allied officer when support restores health." Label="Heal Text" />
+                                    <RoarInputNumber @bind-Value="SettingForm.SupportPopupSeconds" Hint="Duration in seconds for the support popup above the officer." Label="Popup Seconds" step="0.1" />
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Summary="Off-screen battles &amp; reinforcements">
+                            <div class="wa-stack">
+                                <p class="wa-body-s">Distant combat, confirmed kill rewards, reinforcement waves and surprise forces.</p>
+                                <h3 class="wa-heading-s">Off-screen officer damage</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.OffscreenEnabled" Hint="Apply the mod&#39;s named-officer damage sharing during off-screen combat.">Off-screen officer damage sharing</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.OffscreenOfficerDamageShare" Hint="Fraction of existing group damage assigned to its named officer while troops remain; 0.25 means 25%." Label="Officer damage fraction" step="0.05" />
+                                </div>
+                                <h3 class="wa-heading-s">Off-screen kill rewards</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.OffscreenKillRewardsEnabled" Hint="Top up the winning corps&#39; permanent morale for confirmed off-screen kills after crediting native rewards.">Off-screen kill morale rewards</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsSoldier" Hint="Target morale reward per ordinary soldier defeated off-screen, in native morale points." Label="Soldier" step="0.05" />
+                                    <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsElite" Hint="Target morale reward per elite soldier defeated off-screen, in native morale points." Label="Elite" step="0.05" />
+                                    <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsCaptain" Hint="Target morale reward per group captain defeated off-screen, in native morale points." Label="Captain" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsSubordinateOfficer" Hint="Target morale reward per subordinate officer defeated off-screen; corps commanders are excluded." Label="Subordinate Officer" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsWindowMoraleCap" Hint="Maximum additional mod morale per winning corps during one reward window; native rewards are preserved." Label="Window Morale Cap" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsWindowSeconds" Hint="Battle seconds before the per-corps off-screen reward budget resets." Label="Window Seconds" step="0.25" />
+                                </div>
+                                <h3 class="wa-heading-s">Reinforcement waves</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.ReinforcementsEnabled" Hint="Grant permanent morale when reserved reinforcements join an existing corps, crediting native morale gains first.">Reinforcement morale rewards</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.ReinforcementsMoralePerTenPercent" Hint="Target morale points per 10% increase in the corps&#39; ordinary soldiers." Label="Morale Per Ten Percent" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.ReinforcementsWaveMoraleCap" Hint="Maximum target morale gain from one reinforcement wave, before subtracting native gains." Label="Wave Morale Cap" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.ReinforcementsWaveSeconds" Hint="Battle seconds without another arrival before nearby arrivals are treated as one completed wave." Label="Wave Seconds" step="0.25" />
+                                </div>
+                                <h3 class="wa-heading-s">Surprise forces</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.SurpriseForcesEnabled" Hint="Raise an activated surprise force&#39;s corps to maximum base morale, 899 points, on arrival.">Maximum morale on surprise-force arrival</RoarSwitch>
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Summary="Rescue objectives">
+                            <div class="wa-stack">
+                                <p class="wa-body-s">Help endangered allied corps recover and earn permanent morale rewards.</p>
+                                <h3 class="wa-heading-s">Objective</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.RescueEnabled" Hint="Create rescue objectives for endangered allied corps and grant morale for completed rescues.">Rescue objectives</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.RescueObjectiveSeconds" Hint="Battle seconds allowed to complete a rescue after an endangered officer is identified." Label="Objective Seconds" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.RescueActionRadiusMetres" Hint="Distance in metres used to count nearby enemy casualties around the endangered officer and nearest player." Label="Action Radius Metres" step="any" />
+                                </div>
+                                <h3 class="wa-heading-s">Completion conditions</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarInputNumber @bind-Value="SettingForm.RescueRecoverMoralePercent" Hint="Minimum effective corps morale percentage needed to complete the stabilization stage." Label="Recover Morale Percent" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.RescueRecoverHealthPercent" Hint="Minimum rescued-officer health percentage needed to complete the stabilization stage." Label="Recover Health Percent" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.RescueEnemyCasualties" Hint="Nearby enemy casualties required after support; defeating one nearby enemy group leader also meets this condition." Label="Enemy Casualties" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.RescueStableSeconds" Hint="Required casualty-free battle seconds before stabilization, then how long stable morale and health must be sustained." Label="Stable Seconds" step="any" />
+                                </div>
+                                <h3 class="wa-heading-s">Morale rewards</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarInputNumber @bind-Value="SettingForm.RescueMoraleReward" Hint="Permanent morale points awarded to a rescued corps, once per corps per battle." Label="Morale Reward" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.RescueBattleRewardCap" Hint="Maximum total morale points actually granted by rescue rewards across the battle." Label="Battle Reward Cap" step="any" />
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Summary="HUD, alerts &amp; reports">
+                            <div class="wa-stack">
+                                <p class="wa-body-s">Corps displays, distress notifications, battle reports and diagnostics.</p>
+                                <h3 class="wa-heading-s">Corps panels</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.HUDEnabled" Hint="Show the mod&#39;s corps morale panels.">Corps morale panels</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDUpdateMilliseconds" Hint="Milliseconds between mod update cycles; smaller values update the display and observations more frequently." Label="Update Milliseconds" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDPanelWidth" Hint="Width of each corps panel in canvas units, normally corresponding to pixels." Label="Panel Width" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDPortraitSize" Hint="Size of subordinate group leader portraits in the lower panel row." Label="Portrait Size" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDCommanderPortraitSize" Hint="Size of the corps commander&#39;s header portrait, independent of subordinate portraits." Label="Commander Portrait Size" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDTitleFontSize" Hint="Font size of the commander name in each corps panel." Label="Title Font Size" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDLeft" Hint="Horizontal offset of the corps panels from the left edge of the game canvas." Label="Left" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDTop" Hint="Vertical offset of the corps panels from the top edge of the game canvas." Label="Top" step="any" />
+                                    <RoarInputText @bind-Value="SettingForm.HUDAllCorpsKey" Hint="UE4SS key name used to toggle the expanded corps list, for example F7." Label="All Corps Key" />
+                                </div>
+                                <h3 class="wa-heading-s">Morale bar colors</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDAllyMoraleRed" Hint="Red component of the allied permanent-morale bar color, from 0 to 1." Label="Ally Morale Red" step="0.01" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDAllyMoraleGreen" Hint="Green component of the allied permanent-morale bar color, from 0 to 1." Label="Ally Morale Green" step="0.01" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDAllyMoraleBlue" Hint="Blue component of the allied permanent-morale bar color, from 0 to 1." Label="Ally Morale Blue" step="0.01" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDTemporaryRed" Hint="Red component of the temporary-morale bar color, from 0 to 1." Label="Temporary Red" step="0.01" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDTemporaryGreen" Hint="Green component of the temporary-morale bar color, from 0 to 1." Label="Temporary Green" step="0.01" />
+                                    <RoarInputNumber @bind-Value="SettingForm.HUDTemporaryBlue" Hint="Blue component of the temporary-morale bar color, from 0 to 1." Label="Temporary Blue" step="0.01" />
+                                </div>
+                                <h3 class="wa-heading-s">Morale details and trends</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.BattlefieldMoraleDetails" Hint="Show recent morale causes, temporary support time and regroup phases beneath the morale bar.">Morale detail rows</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldTrendSeconds" Hint="Battle-second history window used to calculate morale trends and recent distress losses." Label="Trend Seconds" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldReasonSeconds" Hint="Battle seconds a recorded morale-change reason remains visible in the panel." Label="Reason Seconds" step="any" />
+                                </div>
+                                <h3 class="wa-heading-s">Distress alerts</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.BattlefieldDistressSignals" Hint="Show distress alerts for wounded allied officers in corps with low, deteriorating morale.">Distress notifications</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldDistressMoralePercent" Hint="Maximum corps morale percentage for an allied officer to qualify for distress detection." Label="Distress Morale Percent" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldDistressHealthPercent" Hint="Maximum named-officer health percentage for distress detection; low morale and recent losses are also required." Label="Distress Health Percent" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldDistressDropPercent" Hint="Minimum drop in morale percentage points during the trend window that can qualify a distressed corps." Label="Distress Drop Percent" step="0.1" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldDistressCasualties" Hint="Minimum confirmed casualties during the trend window that can qualify a distressed corps instead of a morale drop." Label="Distress Casualties" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldAlertSeconds" Hint="Battle seconds that distress and rescue-completion notifications remain visible." Label="Alert Seconds" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldAlertCooldownSeconds" Hint="Minimum battle seconds between distress alerts across all corps." Label="Alert Cooldown Seconds" step="any" />
+                                    <RoarInputNumber @bind-Value="SettingForm.BattlefieldCorpsAlertCooldownSeconds" Hint="Minimum battle seconds between alerts for the same corps; also delays a rescue retry after failure." Label="Corps Alert Cooldown Seconds" step="any" />
+                                </div>
+                                <h3 class="wa-heading-s">Battle reports</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.ReportEnabled" Hint="Enable the in-game contribution report overlay; saving the text report has its own switch.">Battle report overlay</RoarSwitch>
+                                    <RoarInputText @bind-Value="SettingForm.ReportKey" Hint="UE4SS key name used to toggle the contribution report, for example F8." Label="Report toggle key" />
+                                    <RoarSwitch @bind-Value="SettingForm.ReportShowOnResults" Hint="Automatically open the contribution report on the results screen when the report overlay is enabled.">Show On Results</RoarSwitch>
+                                    <RoarSwitch @bind-Value="SettingForm.ReportSaveToFile" Hint="Write the final battle report to MoraleMatters-last-battle.txt beside the ASI.">Save To File</RoarSwitch>
+                                </div>
+                                <h3 class="wa-heading-s">Diagnostics</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.GeneralProfile" Hint="Write update timing diagnostics to UE4SS.log to help investigate performance.">Performance diagnostics</RoarSwitch>
+                                </div>
+                            </div>
+                        </RoarDetails>
+                    </div>
+                </EditForm>
+            }
         </RoarCard>
         <div class="wa-stack">
             <RoarCard Orientation="CardOrientation.Vertical">
@@ -123,7 +447,7 @@
     protected override async Task OnInitializedAsync()
     {
         GameFolderForm.GamePath = Preferences.Default.Get(nameof(GameFolderForm.GamePath), "");
-        GameFolderEditContext = new (GameFolderForm);
+        GameFolderEditContext = new(GameFolderForm);
         GameFolderFormValidator = GameFolderEditContext.EnableDataAnnotationsValidation(ServiceProvider);
         SettingEditContext = new(SettingForm);
         SettingFormValidator = SettingEditContext.EnableDataAnnotationsValidation(ServiceProvider);
@@ -193,4 +517,5 @@
         GameFolderFormValidator?.Dispose();
         SettingFormValidator?.Dispose();
     }
+
 }

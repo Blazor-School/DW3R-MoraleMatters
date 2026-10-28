@@ -79,3 +79,14 @@ h1:focus {
 .full-width {
     width: 100%;
 }
+
+.table-input {
+    width: 100%;
+    table-layout: fixed;
+}
+
+    .table-input wa-number-input {
+        display: block;
+        width: 100%;
+        min-width: 0;
+    }
