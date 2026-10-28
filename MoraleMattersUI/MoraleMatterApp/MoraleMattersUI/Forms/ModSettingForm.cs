@@ -395,12 +395,11 @@ public class ModSettingForm : IValidatableObject
         }
     }
 
-    public ModSettingForm LoadModSettings(string iniPath)
+    public void LoadModSettings(string gamePath)
     {
-        using var stream = File.OpenRead(iniPath);
+        string iniFilePath = Path.Combine(gamePath, "MoraleMatters.ini");
+        using var stream = File.OpenRead(iniFilePath);
         using var configuration = (ConfigurationRoot)new ConfigurationBuilder().AddIniStream(stream).Build();
-
-        var form = new ModSettingForm();
         var properties = typeof(ModSettingForm).GetProperties().ToDictionary(property => property.Name, StringComparer.OrdinalIgnoreCase);
 
         foreach (var entry in configuration.AsEnumerable())
@@ -433,9 +432,7 @@ public class ModSettingForm : IValidatableObject
                 value = configuration.GetValue(property.PropertyType, entry.Key);
             }
 
-            property.SetValue(form, value);
+            property.SetValue(this, value);
         }
-
-        return form;
     }
 }

@@ -118,12 +118,15 @@
     public bool InstallLoading { get; set; } = false;
     public ModSettingForm SettingForm { get; set; } = new();
     public EditContext SettingEditContext { get; set; } = default!;
+    public IDisposable? SettingFormValidator { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         GameFolderForm.GamePath = Preferences.Default.Get(nameof(GameFolderForm.GamePath), "");
-        GameFolderEditContext = new EditContext(GameFolderForm);
+        GameFolderEditContext = new (GameFolderForm);
         GameFolderFormValidator = GameFolderEditContext.EnableDataAnnotationsValidation(ServiceProvider);
+        SettingEditContext = new(SettingForm);
+        SettingFormValidator = SettingEditContext.EnableDataAnnotationsValidation(ServiceProvider);
         await UpdateModInstallationAsync();
     }
 
@@ -160,10 +163,12 @@
                 if (string.IsNullOrEmpty(LocalModVersion))
                 {
                     app.TitleBar.Subtitle = "Mod not installed";
+                    ResetSettingForm();
                 }
                 else
                 {
                     app.TitleBar.Subtitle = $"Mod version: {LocalModVersion}";
+                    SettingForm.LoadModSettings(GameFolderForm.GamePath);
                 }
             }
         }
@@ -177,8 +182,15 @@
         InstallLoading = false;
     }
 
+    public void ResetSettingForm()
+    {
+        SettingForm = new();
+        SettingEditContext.MarkAsUnmodified();
+    }
+
     public void Dispose()
     {
         GameFolderFormValidator?.Dispose();
+        SettingFormValidator?.Dispose();
     }
 }
