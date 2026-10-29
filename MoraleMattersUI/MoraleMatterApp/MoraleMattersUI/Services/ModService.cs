@@ -1,6 +1,9 @@
 ﻿using Roar.DependencyInjection;
+using MoraleMattersUI.Forms;
+using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 using Velopack;
 using Velopack.Sources;
 
@@ -76,6 +79,29 @@ public class ModService(VelopackLogger VelopackLogger)
         }
 
         Directory.Delete(tempFolder, recursive: true);
+    }
+
+    public async Task SaveModSettingsAsync(string gamePath, ModSettingForm settings)
+    {
+        string[] sections = ["General", "OffscreenKillRewards", "Offscreen", "Reinforcements", "SurpriseForces", "Drops", "EnemyProximity", "Behavior", "Support", "Casualties", "Combat", "HUD", "Battlefield", "Rescue", "Report"];
+        var groups = typeof(ModSettingForm).GetProperties().GroupBy(property => sections.First(section => property.Name.StartsWith(section, StringComparison.Ordinal)));
+        var content = new StringBuilder();
+
+        foreach (var group in groups)
+        {
+            content.AppendLine($"[{group.Key}]");
+
+            foreach (var property in group)
+            {
+                object? value = property.GetValue(settings);
+                string? text = value is bool enabled ? (enabled ? "1" : "0") : Convert.ToString(value, CultureInfo.InvariantCulture);
+                content.AppendLine($"{property.Name[group.Key.Length..]}={text}");
+            }
+
+            content.AppendLine();
+        }
+
+        await File.WriteAllTextAsync(Path.Combine(gamePath, "MoraleMatters.ini"), content.ToString());
     }
 
     private GithubSource GetGithubSource() => new("https://github.com/Blazor-School/DW3R-MoraleMatters", "", false);
