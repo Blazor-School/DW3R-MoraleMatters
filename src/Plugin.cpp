@@ -145,7 +145,7 @@ namespace
         swprintf(logPath, 32768, L"%ls\\MoraleMatters.log", path);
         LogFile = CreateFileW(logPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         ReadSettings();
-        Log("Morale Matters 1.7.2. Officer share=%.2f rally=%.0f/%.0fs healing=%.0f%% cooldown=%.0fs.", Config.officerDamageShare, Config.rallyBonus, Config.rallyDuration, Config.healFraction * 100, Config.healCooldown);
+        Log("Morale Matters 1.7.3. Officer share=%.2f rally=%.0f/%.0fs healing=%.0f%% cooldown=%.0fs.", Config.officerDamageShare, Config.rallyBonus, Config.rallyDuration, Config.healFraction * 100, Config.healCooldown);
         Log("Battlefield: phasedRegroup=%d withdrawal=%.0fm reformScale=%.2f rescue=%d reward=%.0f battleCap=%.0f.", Behavior.withdrawal, Behavior.withdrawalDistance / 100, Behavior.withdrawalScale, Experience.rescue, Experience.rescueReward, Experience.rescueBattleCap);
         Log("Supplies/cohesion: drops=%d comboHits=%d meatBunPercent=%d enemyProximity=%d radius=%.0fm bonus=%.0f (mutual living leaders; no separation grace).", Config.meatBuns, Config.dropComboHits, Config.meatBunPercent, Config.enemyProximity, Config.enemyProximityRadius / 100, Config.enemyProximityBonus);
         Log("Off-screen kill rewards: enabled=%d soldier=%.2f elite=%.2f captain=%.2f officer=%.2f cap=%.2f window=%.2fs (native gains credited).", KillRewards.enabled, KillRewards.soldier, KillRewards.elite, KillRewards.captain, KillRewards.officer, KillRewards.cap, KillRewards.seconds);

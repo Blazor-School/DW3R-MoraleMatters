@@ -56,10 +56,10 @@ public class ModSettingForm : IValidatableObject
     public bool DropsEnabled { get; set; } = true;
 
     [Range(1.0, 999.0)]
-    public int DropsComboHits { get; set; } = 12;
+    public int DropsComboHits { get; set; } = 14;
 
     [Range(0.0, 100.0)]
-    public int DropsMeatBunPercent { get; set; } = 80;
+    public int DropsMeatBunPercent { get; set; } = 60;
 
     // [EnemyProximity]
     public bool EnemyProximityEnabled { get; set; } = true;

@@ -163,7 +163,7 @@ classes={}
 function StaticFindObject(path)
  if classes[path] then return classes[path] end
  local w=widget(path:match('%.([^%.]+)$'));classes[path]=w
- function w:GetUnitName(unit) return stringValue('Officer '..unit) end
+ function w:GetUnitName(unit) return stringValue(unit>=405 and unit<=413 and 'Vice General' or 'Officer '..unit) end
  function w:GetFaceID(unit) return unit end
  function w:GetFaceStillPath(unit) return stringValue('face'..unit) end
  function w:GetDataTableRowNames() end
@@ -272,35 +272,52 @@ for width, portrait, commander, details in ((220,16,16,1),(220,64,64,1),(300,30,
     layout = LuaRuntime(unpack_returned_tuples=True)
     layout.execute(harness)
     layout.globals().iniText = f'[HUD]\nPanelWidth={width}\nPortraitSize={portrait}\nCommanderPortraitSize={commander}\n[Battlefield]\nMoraleDetails={details}\n'
+    layout.globals().expectedPortrait = portrait
+    layout.globals().expectedCommander = commander
     layout.globals().api = layout.execute('local source,name=...;return assert(load(source,name))()',source+'\nreturn {newPanel=newPanel,render=render,formations=formations}','@'+str(root/'Scripts'/'main.lua'))
     layout.execute(r'''
 tick(0);tick(1)
-groupCount=20
-for id=0,19 do nativeGroups[id]={0,id<6 and 100+id or id<11 and 405 or 420,id<6 and 3 or 6,0,1,100,100,0,0,0,8,0,0,0} end
+groupCount=30
+for id=0,29 do nativeGroups[id]={0,id<6 and 100+id or id<15 and 399+id or 420+id%3,id<6 and 3 or 6,0,1,100,100,0,0,0,8,0,0,0} end
 nativeGroups[1][6]=25
 nativeGroups[2][6]=70
 local rows=api.formations({})
-assert(#rows[0].members==19,'Group commanders were combined or corps commander was duplicated')
-for _,member in ipairs(rows[0].members) do assert(member.id~=rows[0].leader and member.count==nil) end
+assert(#rows[0].members==15,'Expected five officers, nine individual Vice Generals and one collapsed row')
+for index,member in ipairs(rows[0].members) do
+ assert(member.id~=rows[0].leader,'Corps commander was duplicated')
+ if index<15 then assert(member.count==nil) else assert(member.count==15,'Mixed generic unit types were not combined') end
+end
 local panel=api.newPanel(widget('CanvasPanel'),1)
 local height=api.render(panel,rows[0],36,170)
-assert(panel.icons[1].healthSlot.size.X==math.floor(panel.icons[1].slot.size.X*0.25+0.5))
-assert(panel.icons[2].healthSlot.size.X==math.floor(panel.icons[2].slot.size.X*0.70+0.5))
-for _,icon in ipairs(panel.icons) do
- assert(icon.healthBack.visible==4 and icon.health.visible==4)
- assert(icon.healthSlot.position.Y==icon.slot.position.Y+icon.slot.size.Y+2)
- assert(icon.healthSlot.position.X==icon.slot.position.X)
+assert(panel.icons[1].healthSlot.size.X==math.floor(panel.icons[1].healthWidth*0.25+0.5))
+assert(panel.icons[2].healthSlot.size.X==math.floor(panel.icons[2].healthWidth*0.70+0.5))
+assert(panel.icons[15].label.text=='×15' and panel.icons[15].health.visible==1 and panel.icons[15].healthBack.visible==1)
+for index,icon in ipairs(panel.icons) do
+ assert(icon.slot.size.X==expectedPortrait and icon.slot.size.Y==expectedPortrait,'Portraits lost the configured size')
+ assert(icon.label.clipping==1 and icon.label.overflow==1)
+ if index<15 then
+  assert(icon.healthBack.visible==4 and icon.health.visible==4)
+  assert(icon.healthSlot.position.Y==icon.labelSlot.position.Y+20)
+  assert(icon.healthSlot.position.X==icon.labelSlot.position.X and icon.labelSlot.position.X>icon.slot.position.X+icon.slot.size.X)
+  assert(icon.label.text==(index<=5 and 'Officer '..(100+index) or 'Vice General'))
+ end
+ if index>1 then assert(icon.slot.position.Y>panel.icons[index-1].slot.position.Y+panel.icons[index-1].slot.size.Y,'Officer rows overlap') end
 end
 local signature=panel.members
 rows[0].members[1].health=0.5;api.render(panel,rows[0],36,170)
 assert(panel.members==signature,'HP change rebuilt the portrait layout')
-assert(panel.icons[1].healthSlot.size.X==math.floor(panel.icons[1].slot.size.X*0.5+0.5))
+assert(panel.icons[1].healthSlot.size.X==math.floor(panel.icons[1].healthWidth*0.5+0.5))
 nativeGroups[1][5]=0
 local updated=api.formations({});height=api.render(panel,updated[0],36,170)
-assert(#updated[0].members==18 and panel.icons[19].health.visible==1 and panel.icons[19].healthBack.visible==1)
-assert(updated[0].members[1].id==2 and panel.icons[1].healthSlot.size.X==math.floor(panel.icons[1].slot.size.X*0.70+0.5))
+assert(#updated[0].members==14 and panel.icons[15].image.visible==1 and panel.icons[15].label.visible==1)
+assert(panel.icons[14].label.text=='×15' and panel.icons[14].health.visible==1,'Reused officer row retained a health bar')
+assert(updated[0].members[1].id==2 and panel.icons[1].healthSlot.size.X==math.floor(panel.icons[1].healthWidth*0.70+0.5))
+nativeGroups[15][5]=0
+updated=api.formations({});height=api.render(panel,updated[0],36,170)
+assert(panel.icons[14].label.text=='×14','Generic casualty did not update the count')
 rows=updated
 assert(panel.commander.Slot.position.X+panel.commander.Slot.size.X<panel.title.Slot.position.X)
+assert(panel.commander.Slot.size.X==expectedCommander and panel.commander.Slot.size.Y==expectedCommander)
 assert(panel.commander.Slot.position.X+panel.commander.Slot.size.X<panel.trendIcon.root.Slot.position.X)
 assert(panel.trendIcon.root.Slot.position.X+14<panel.title.Slot.position.X)
 assert(panel.trendIcon.root.Slot.position.Y+14<panel.permanentSlot.position.Y)
@@ -310,9 +327,10 @@ assert(panel.title.overflow==1 and panel.title.clipping==1)
 assert(height==panel.backdropSlot.size.Y and height==panel.slot.size.Y)
 for _,icon in ipairs(panel.icons) do
  if icon.image.visible==4 then
-  local right=icon.countText.visible==4 and icon.countSlot.position.X+icon.countSlot.size.X or icon.slot.position.X+icon.slot.size.X
+  local right=icon.labelSlot.position.X+icon.labelSlot.size.X
   assert(right<=panel.slot.size.X-16)
-  assert(panel.portraitCanvas.Slot.position.Y+icon.healthSlot.position.Y+3<height)
+  assert(panel.portraitCanvas.Slot.position.Y+icon.slot.position.Y+icon.slot.size.Y<height)
+  if icon.health.visible==4 then assert(panel.portraitCanvas.Slot.position.Y+icon.healthSlot.position.Y+3<height) end
  end
 end
 if panel.detail then
@@ -335,5 +353,38 @@ assert(panel.trendIcon.arrow.visible==1 and panel.trendIcon.steady.visible==4)
 rows[0].trend='^';api.render(panel,rows[0],36,170)
 rows[0].trend=nil;api.render(panel,rows[0],36,170)
 assert(panel.trendIcon.arrow.visible==1 and panel.trendIcon.steady.visible==4,'Reused panel retained previous corps trend')
+-- Dead, inactive and neutral leaders never inflate the collapsed count.
+nativeGroups[16][5]=0;nativeGroups[17][4]=2;nativeGroups[18][1]=-1
+updated=api.formations({});api.render(panel,updated[0],36,170)
+assert(panel.icons[14].label.text=='×11')
+for id=19,29 do nativeGroups[id][5]=0 end
+updated=api.formations({});api.render(panel,updated[0],36,170)
+assert(#updated[0].members==13 and panel.icons[14].image.visible==1 and panel.icons[14].label.visible==1,'Zero-count summary remained visible')
+-- A single generic survivor keeps an explicit count, on both sides.
+nativeGroups[29][5]=1
+updated=api.formations({});updated[0].side=1;api.render(panel,updated[0],36,170)
+assert(panel.icons[14].label.text=='×1' and panel.icons[14].health.visible==1)
+assert(panel.icons[1].label.color.SpecifiedColor.R>panel.icons[1].label.color.SpecifiedColor.G)
+assert(panel.icons[1].health.color.R>panel.icons[1].health.color.G)
+nativeGroups[29][5]=0
+for id=1,14 do nativeGroups[id][5]=0 end
+updated=api.formations({});height=api.render(panel,updated[0],36,170)
+assert(#updated[0].members==0 and panel.icons[1].image.visible==1 and panel.icons[1].label.visible==1)
+assert(panel.portraitCanvas.Slot.size.Y==0 and panel.slot.size.Y==height,'Empty roster retained its previous height')
+-- Reusing the summary widget for a named officer restores its name and HP bar.
+nativeGroups[29][5]=1
+updated=api.formations({});api.render(panel,updated[0],36,170)
+assert(panel.icons[1].label.text=='×1' and panel.icons[1].health.visible==1)
+nativeGroups[1][5]=1;nativeGroups[1][6]=70
+updated=api.formations({});api.render(panel,updated[0],36,170)
+assert(panel.icons[1].label.text=='Officer 101' and panel.icons[1].health.visible==4)
+assert(panel.icons[1].healthSlot.size.X==math.floor(panel.icons[1].healthWidth*0.70+0.5))
+assert(panel.icons[2].label.text=='×1' and panel.icons[2].health.visible==1)
+-- Full and empty HP clamp cleanly without changing row geometry.
+local signature=panel.members
+updated[0].members[1].health=1.5;api.render(panel,updated[0],36,170)
+assert(panel.icons[1].healthSlot.size.X==panel.icons[1].healthWidth)
+updated[0].members[1].health=-0.2;api.render(panel,updated[0],36,170)
+assert(panel.icons[1].healthSlot.size.X==0 and panel.members==signature)
 ''')
-print('Passed five full-HUD layout cases: narrow/custom panels, 16-64px portraits, multi-row wrapping, ellipsis, details, compact height and header trend icon transitions/caching.')
+print('Passed five full-HUD layout cases: individual officers/all Vice General variants, one unnamed count, casualties/filtering, widget reuse, live HP, 16-64px configured portraits, narrow panels, ellipsis, dynamic height and trend caching.')

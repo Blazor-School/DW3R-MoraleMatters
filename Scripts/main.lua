@@ -311,9 +311,13 @@ local function formations(players, liveHealth)
                 row = {id=corps, leader=leader, side=corpsSide, base=base, morale=effective, bonus=bonus, remaining=remaining or 0,proximity=proximity or 0,reason=reason or 0,reasonAge=reasonAge or math.huge,members={}, distance=math.huge}
                 result[corps] = row
             end
-            local vice = isViceGeneral(unit)
             if id == row.leader then row.unit, row.leaderAlive = unit, true
-            else row.members[#row.members + 1] = {id=id,unit=unit,rank=rank,vice=vice,health=groups[id].health} end
+            elseif (rank >= 2 and rank <= 5) or isViceGeneral(unit) then
+                row.members[#row.members + 1] = {id=id,unit=unit,rank=rank,health=groups[id].health}
+            else
+                if not row.groupLeaders then row.groupLeaders = {unit=unit,count=0} end
+                row.groupLeaders.count = row.groupLeaders.count + 1
+            end
             if rank >= 2 and rank <= 5 then
                 if not row.wounded or groups[id].health < row.wounded.health then row.wounded = groups[id] end
                 for _, player in ipairs(players) do
@@ -330,7 +334,8 @@ local function formations(players, liveHealth)
             local _, unit, _, _, alive = bridge(2, row.leader)
             row.unit, row.leaderAlive = unit, alive == 1
         end
-        table.sort(row.members, function(a,b) if a.id==b.id then return false elseif a.id==row.leader then return true elseif b.id==row.leader then return false elseif a.rank~=b.rank then return a.rank<b.rank else return a.id<b.id end end)
+        table.sort(row.members, function(a,b) if a.rank~=b.rank then return a.rank<b.rank else return a.id<b.id end end)
+        if row.groupLeaders then row.members[#row.members + 1] = row.groupLeaders end
         if row.unit then list[#list+1] = row end
     end
     table.sort(list, function(a,b) if a.side~=b.side then return a.side<b.side else return a.distance<b.distance end end)
@@ -389,50 +394,60 @@ local function render(panel, row, x, y)
         if panel.statusText ~= status then panel.status:SetText(FText(status)); panel.statusText=status end
     end
     local signature = {}
-    for _,member in ipairs(row.members) do signature[#signature+1] = (member.id or -1) .. ":" .. member.unit .. ":" .. (member.count or 0) .. (member.vice and ":VG" or "") end
+    for _,member in ipairs(row.members) do signature[#signature+1] = (member.id or -1) .. ":" .. member.unit .. ":" .. (member.count or 0) end
     signature = table.concat(signature, ",")
     if panel.members ~= signature then
-        local iconX, iconY = 0, 0
+        local iconY = 0
         for index, member in ipairs(row.members) do
-            local labelWidth = member.vice and (36 + #tostring(member.count)*10) or 38
-            local itemWidth = portraitSize + (member.count and labelWidth+4 or 4)
-            if iconX > 0 and iconX + itemWidth > width-16 then iconX, iconY = 0, iconY+portraitSize+9 end
+            local rowHeight = math.max(portraitSize, member.count and 18 or 24)
+            local labelX = portraitSize + 8
+            local labelWidth = width - 16 - labelX
+            local labelY = iconY + (rowHeight - (member.count and 18 or 24))/2
             local icon = panel.icons[index]
             if not icon then
                 local image, slot = makeImage(panel.portraitCanvas, 0, 0, portraitSize, portraitSize, white)
-                local countText = makeText(panel.portraitCanvas, 0, 0, 50, portraitSize+2, 12)
+                local label = makeText(panel.portraitCanvas, 0, 0, labelWidth, 18, 12)
+                label:SetClipping(1)
+                label:SetTextOverflowPolicy(1)
                 local healthBack, healthBackSlot = makeImage(panel.portraitCanvas,0,0,portraitSize,3,{R=0.11,G=0.12,B=0.14,A=1})
                 local health, healthSlot = makeImage(panel.portraitCanvas,0,0,portraitSize,3,allyFill)
-                icon = {image=image,slot=slot,countText=countText,countSlot=countText.Slot,health=health,healthSlot=healthSlot,healthBack=healthBack,healthBackSlot=healthBackSlot}; panel.icons[index] = icon
+                icon = {image=image,slot=slot,label=label,labelSlot=label.Slot,health=health,healthSlot=healthSlot,healthBack=healthBack,healthBackSlot=healthBackSlot}; panel.icons[index] = icon
             end
             if icon.unit ~= member.unit then
                 local texture = portrait(member.unit)
                 if valid(texture) then icon.image:SetBrushFromTexture(texture, false) end
                 icon.unit = member.unit
             end
-            icon.slot:SetPosition({X=iconX,Y=iconY})
-            icon.healthBackSlot:SetPosition({X=iconX,Y=iconY+portraitSize+2})
-            icon.healthSlot:SetPosition({X=iconX,Y=iconY+portraitSize+2})
-            icon.healthBack:SetVisibility(4)
-            icon.health:SetVisibility(4)
+            icon.slot:SetPosition({X=0,Y=iconY+(rowHeight-portraitSize)/2})
+            icon.labelSlot:SetPosition({X=labelX,Y=labelY})
+            icon.labelSlot:SetSize({X=labelWidth,Y=18})
+            icon.label:SetColorAndOpacity({SpecifiedColor=member.count and white or (row.side == 0 and allyColor or enemyFill),ColorUseRule=0})
+            icon.healthWidth = member.count and 0 or labelWidth
+            icon.healthBackSlot:SetPosition({X=labelX,Y=labelY+20})
+            icon.healthBackSlot:SetSize({X=icon.healthWidth,Y=3})
+            icon.healthSlot:SetPosition({X=labelX,Y=labelY+20})
+            icon.healthBack:SetVisibility(member.count and 1 or 4)
+            icon.health:SetVisibility(member.count and 1 or 4)
             icon.health:SetColorAndOpacity(row.side == 0 and allyFill or enemyFill)
             icon.healthPixels = nil
             icon.image:SetVisibility(4)
-            icon.countText:SetVisibility(member.count and 4 or 1)
             if member.count then
-                icon.countText:SetText(FText((member.vice and "VG x " or "x ") .. member.count))
-                icon.countSlot:SetPosition({X=iconX+portraitSize+3,Y=iconY})
-                icon.countSlot:SetSize({X=labelWidth,Y=portraitSize+2})
+                icon.label:SetText(FText("×" .. member.count))
+            else
+                if not names[member.unit] then names[member.unit] = ui:GetUnitName(member.unit, false):ToString() end
+                icon.label:SetText(FText(names[member.unit]))
             end
-            iconX = iconX + itemWidth
+            icon.label:SetVisibility(4)
+            iconY = iconY + rowHeight + 6
         end
-        for index=#row.members+1,#panel.icons do panel.icons[index].image:SetVisibility(1); panel.icons[index].countText:SetVisibility(1); panel.icons[index].health:SetVisibility(1); panel.icons[index].healthBack:SetVisibility(1) end
-        panel.contentHeight = #row.members > 0 and (portraitTop + iconY + portraitSize + 11) or portraitTop
+        for index=#row.members+1,#panel.icons do panel.icons[index].image:SetVisibility(1); panel.icons[index].label:SetVisibility(1); panel.icons[index].health:SetVisibility(1); panel.icons[index].healthBack:SetVisibility(1) end
+        panel.contentHeight = portraitTop + iconY
+        panel.portraitCanvas.Slot:SetSize({X=width-16,Y=iconY})
         panel.members = signature
     end
     for index,member in ipairs(row.members) do
         local icon = panel.icons[index]
-        local pixels = math.floor(portraitSize*math.max(0,math.min(1,member.health or 0))+0.5)
+        local pixels = math.floor(icon.healthWidth*math.max(0,math.min(1,member.health or 0))+0.5)
         if icon.healthPixels ~= pixels then icon.healthSlot:SetSize({X=pixels,Y=3}); icon.healthPixels=pixels end
     end
     local height = panel.contentHeight or (portraitTop + portraitSize + 6)

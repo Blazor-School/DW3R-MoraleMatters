@@ -241,3 +241,14 @@ No new live battlefield/visual verification was performed for 1.7.1. Leader pres
 - Release files: `release/v1.7.2/MoraleMatters-v1.7.2.zip` and `release/v1.7.2/releases.mod.json`, using the same package layout and manifest schema as the previous releases. The manifest contains the archive's SHA-1, SHA-256, byte size and release notes.
 
 No new live battlefield or visual verification was performed for this release. This release expands configuration limits without changing the shipped gameplay settings.
+
+## 1.7.3 compact group leaders and named officer rows (2026-10-30)
+
+- Each corps panel combines its surviving unnamed group leaders into one portrait and a count such as `×6`, without a unit-type label or aggregate health bar. The corps commander is excluded from this count.
+- Surviving named subordinate officers and all nine Vice General variants remain individual rows with the native portrait, localized game name and their own live health bar. Officer names and health bars retain allied/enemy colors. Names clip with an ellipsis when necessary.
+- Both the collapsed icon and subordinate officer portraits use the existing `[HUD] PortraitSize`; the commander header retains `CommanderPortraitSize`. Panel width is unchanged, and height follows the visible rows. No INI keys or defaults were added or changed.
+- Full real-script Lua fixtures pass at five combinations of panel width, details visibility and 16-64 pixel portrait sizes. They cover all nine Vice General variants, mixed unnamed unit types sharing one count, commander exclusion, casualty/filter updates, zero/one survivors, widget reuse between officer and count rows, health clamping/updates without rebuilding layout, name clipping, row/panel bounds and existing report/results/lifecycle behavior.
+- The warnings-as-errors native release build and its model, callback, actual-native damage/drop, Lua/HUD and unsupported-host checks pass. Log: `build/release-1.7.3-native-build.log`. MoraleMattersUI recognizes the new ASI SHA-256 as 1.7.3; its Release build passes with existing nullable and PRI warnings. Log: `build/release-1.7.3-ui-build.log`.
+- Release files: `releases/v1.7.3/MoraleMatters-v1.7.3.zip` and `releases/v1.7.3/releases.mod.json`. The local game receives the updated ASI and scripts while retaining its existing INI byte for byte.
+
+No live battlefield visual check was performed for this release. HUD verification uses the real Lua script with native bridge and UMG stand-ins.
