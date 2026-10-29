@@ -801,9 +801,21 @@
                         </RoarDetails>
                     </div>
                     <RoarDivider />
-                    <div class="wa-cluster wa-justify-content-end">
-                        <RoarButton @onclick="ResetSettingForm">Restore defaults</RoarButton>
-                        <RoarButton Variant="ButtonVariant.Brand" @onclick="SaveSettingAsync">Save settings</RoarButton>
+                    <div class="wa-cluster wa-justify-content-space-between">
+                        <div>
+                            @if (SettingEditContext.IsModified())
+                            {
+                                <RoarBadge Variant="BadgeVariant.Warning">Unsaved changes</RoarBadge>
+                            }
+                            else
+                            {
+                                <RoarBadge Variant="BadgeVariant.Neutral">No changes</RoarBadge>
+                            }
+                        </div>
+                        <div>
+                            <RoarButton @onclick="ResetSettingForm">Restore defaults</RoarButton>
+                            <RoarButton Variant="ButtonVariant.Brand" @onclick="SaveSettingAsync">Save settings</RoarButton>
+                        </div>
                     </div>
                 </EditForm>
             }
@@ -871,9 +883,7 @@
     </div>
 </main>
 
-<RoarToast @ref="Toast">
-
-</RoarToast>
+<RoarToast @ref="Toast" />
 
 @code {
     public GameFolderForm GameFolderForm { get; set; } = new();
@@ -972,10 +982,11 @@
         if (SettingEditContext.Validate())
         {
             await ModService.SaveModSettingsAsync(GameFolderForm.GamePath, SettingForm);
-            await Toast.CreateAsync("Save successfully", new()
+            await Toast.CreateAsync("Save successfully. Take effect after restarting the game.", new()
             {
                 Variant = ToastVariant.Success,
             });
+            SettingEditContext.MarkAsUnmodified();
         }
         else
         {
