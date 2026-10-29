@@ -50,8 +50,8 @@
                         <RoarDetails>
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
-                                    <RoarIcon Name="handshake" />
-                                    Morale settings
+                                    <RoarIcon Name="hand-fist" />
+                                    Combat settings
                                 </div>
                                 <div class="wa-body-s">The higher the morale, the more effective the unit's combat abilities. Affect both allies and enemies.</div>
                             </div>
@@ -60,13 +60,15 @@
                                     <RoarSwitch @bind-Value="SettingForm.CombatEnabled" Hint="Scale ordinary combat damage and native AI attack waits according to corps morale.">Combat scaling</RoarSwitch>
                                     <ValidationMessage For="() => SettingForm.CombatEnabled" />
                                 </div>
+                                <div class="wa-body-s">Each row sets the combat effects at its configured morale point. Effects change gradually between points. Below the first point or above the last point, the nearest row's effects apply.</div>
+                                <div class="wa-body-s">Example with default settings: At 300 morale, effects are halfway between the 200 and 400 morale rows. Damage dealt is halfway between 0.55 and 1.00, giving a multiplier of 0.775.</div>
                                 <div style="overflow-x: auto;">
                                     <table class="table-input">
                                         <caption class="wa-visually-hidden">Combat scaling by morale tier</caption>
                                         <thead>
                                             <tr>
                                                 <th id="combat-tier-header" scope="col" tabindex="0">Morale tier</th>
-                                                <th id="combat-points-header" scope="col" tabindex="0">Points</th>
+                                                <th id="combat-points-header" scope="col" tabindex="0">Morale points</th>
                                                 <th id="combat-damage-dealt-header" scope="col" tabindex="0">Damage dealt</th>
                                                 <th id="combat-damage-taken-header" scope="col" tabindex="0">Damage taken</th>
                                                 <th id="combat-attack-frequency-header" scope="col" tabindex="0">Attack frequency</th>
@@ -76,7 +78,7 @@
                                             <tr>
                                                 <th scope="row">
                                                     <div class="wa-body">Very low</div>
-                                                    <div class="wa-body">(1 to @SettingForm.CombatVeryLowMorale)</div>
+                                                    <div class="wa-body">At @SettingForm.CombatVeryLowMorale morale</div>
                                                 </th>
                                                 <td>
                                                     <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryLowMorale" Label="Very Low Morale" min="1" max="@(SettingForm.CombatLowMorale - 1)" step="1" />
@@ -98,7 +100,7 @@
                                             <tr>
                                                 <th scope="row">
                                                     <div class="wa-body">Low</div>
-                                                    <div class="wa-body">(@(SettingForm.CombatVeryLowMorale + 1) to @SettingForm.CombatLowMorale)</div>
+                                                    <div class="wa-body">At @SettingForm.CombatLowMorale morale</div>
                                                 </th>
                                                 <td>
                                                     <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatLowMorale" Label="Low Morale" min="@(SettingForm.CombatVeryLowMorale + 1)" max="@(SettingForm.CombatReferenceMorale - 1)" step="1" />
@@ -120,7 +122,7 @@
                                             <tr>
                                                 <th scope="row">
                                                     <div class="wa-body">Normal</div>
-                                                    <div class="wa-body">(@(SettingForm.CombatLowMorale + 1) to @SettingForm.CombatReferenceMorale)</div>
+                                                    <div class="wa-body">At @SettingForm.CombatReferenceMorale morale</div>
                                                 </th>
                                                 <td>
                                                     <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatReferenceMorale" Label="Reference Morale" min="@(SettingForm.CombatLowMorale + 1)" max="@(SettingForm.CombatHighMorale - 1)" step="1" />
@@ -142,7 +144,7 @@
                                             <tr>
                                                 <th scope="row">
                                                     <div class="wa-body">High</div>
-                                                    <div class="wa-body">(@(SettingForm.CombatReferenceMorale + 1) to @SettingForm.CombatHighMorale)</div>
+                                                    <div class="wa-body">At @SettingForm.CombatHighMorale morale</div>
                                                 </th>
                                                 <td>
                                                     <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatHighMorale" Label="High Morale" min="@(SettingForm.CombatReferenceMorale + 1)" max="@(SettingForm.CombatVeryHighMorale - 1)" step="1" />
@@ -164,7 +166,7 @@
                                             <tr>
                                                 <th scope="row">
                                                     <div class="wa-body">Very high</div>
-                                                    <div class="wa-body">(@(SettingForm.CombatHighMorale + 1) to @SettingForm.CombatVeryHighMorale)</div>
+                                                    <div class="wa-body">At @SettingForm.CombatVeryHighMorale morale</div>
                                                 </th>
                                                 <td>
                                                     <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryHighMorale" Label="Very High Morale" min="@(SettingForm.CombatHighMorale + 1)" max="899" step="1" />
@@ -189,7 +191,7 @@
                                     <RoarTooltip For="combat-points-header">Native morale points for each scaling anchor. Effects interpolate between anchors.</RoarTooltip>
                                     <RoarTooltip For="combat-damage-dealt-header">Outgoing damage multiplier. 1 means normal damage; 2 doubles the coefficient.</RoarTooltip>
                                     <RoarTooltip For="combat-damage-taken-header">Incoming damage multiplier. 1 means normal damage; 0.5 halves the coefficient.</RoarTooltip>
-                                    <RoarTooltip For="combat-attack-frequency-header">Native AI retry-wait frequency factor. 2 halves the affected waits without speeding up animations.</RoarTooltip>
+                                    <RoarTooltip For="combat-attack-frequency-header">The attack rate, not the animation speed. Value from 1 to 5.</RoarTooltip>
                                 </div>
                                 <div class="wa-stack wa-gap-xs">
                                     <RoarSlider @bind-Value="SettingForm.CombatNamedOfficerStrength" Hint="Strength of combat scaling and native AI profile shifts for named officers" Min="0" Max="1" Label="Named officer effect strength" Step="0.01" WithTooltip>
@@ -198,12 +200,13 @@
                                     </RoarSlider>
                                     <ValidationMessage For="() => SettingForm.CombatNamedOfficerStrength" />
                                 </div>
-                                <h3 class="wa-heading-s">Casualty morale penalties</h3>
-                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                <div class="wa-stack">
                                     <div class="wa-stack wa-gap-xs">
-                                        <RoarSwitch @bind-Value="SettingForm.CasualtiesEnabled" Hint="Use configured corps morale losses for confirmed casualties, replacing the corresponding native penalty.">Casualty morale penalties</RoarSwitch>
+                                        <RoarSwitch @bind-Value="SettingForm.CasualtiesEnabled" Hint="Corps will lose morale when units are defeated.">Casualty morale penalties</RoarSwitch>
                                         <ValidationMessage For="() => SettingForm.CasualtiesEnabled" />
                                     </div>
+                                </div>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
                                     <div class="wa-stack wa-gap-xs">
                                         <RoarInputNumber @bind-Value="SettingForm.CasualtiesSoldier" Hint="Corps morale points lost per ordinary soldier killed." Label="Soldier" min="0" max="898" step="1" />
                                         <ValidationMessage For="() => SettingForm.CasualtiesSoldier" />
