@@ -55,9 +55,14 @@ if errorlevel 1 goto :finish
 rem Some Velopack failures return exit code zero, so also check its output.
 if not exist "%PACK_OUTPUT_DIR%\MoraleMattersUI-ui-win-x64-Setup.exe" goto :finish
 if not exist "%PACK_OUTPUT_DIR%\releases.ui-win-x64.json" goto :finish
+if not exist "%PACK_OUTPUT_DIR%\MoraleMattersUI-%PACK_APP_VERSION%-ui-win-x64-full.nupkg" goto :finish
+
+rem Manual GitHub uploads do not need Velopack's deployment metadata or legacy feed.
+powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; Remove-Item -LiteralPath 'bin\velopack\assets.ui-win-x64.json', 'bin\velopack\RELEASES-ui-win-x64' -Force"
+if errorlevel 1 goto :finish
 
 echo.
-echo Packaging complete. Installer and update packages:
+echo Packaging complete. Upload all three files from this folder to GitHub Releases:
 echo %PACK_OUTPUT_DIR%
 set "PACK_EXIT_CODE=0"
 
