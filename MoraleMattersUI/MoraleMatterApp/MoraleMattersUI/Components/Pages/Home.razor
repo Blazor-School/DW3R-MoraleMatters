@@ -800,6 +800,11 @@
                             </div>
                         </RoarDetails>
                     </div>
+                    <RoarDivider />
+                    <div class="wa-cluster wa-justify-content-end">
+                        <RoarButton @onclick="ResetSettingForm">Restore defaults</RoarButton>
+                        <RoarButton Variant="ButtonVariant.Brand" @onclick="SaveSettingAsync">Save settings</RoarButton>
+                    </div>
                 </EditForm>
             }
         </RoarCard>
@@ -866,6 +871,10 @@
     </div>
 </main>
 
+<RoarToast @ref="Toast">
+
+</RoarToast>
+
 @code {
     public GameFolderForm GameFolderForm { get; set; } = new();
     public EditContext GameFolderEditContext { get; set; } = default!;
@@ -878,6 +887,7 @@
     public ModSettingForm SettingForm { get; set; } = new();
     public EditContext SettingEditContext { get; set; } = default!;
     public IDisposable? SettingFormValidator { get; set; }
+    public RoarToast Toast { get; set; } = default!;
 
     private void ValidateBehaviorRegroup() => SettingEditContext.Validate();
 
@@ -957,4 +967,22 @@
         SettingFormValidator?.Dispose();
     }
 
+    public async Task SaveSettingAsync()
+    {
+        if (SettingEditContext.Validate())
+        {
+            await ModService.SaveModSettingsAsync(GameFolderForm.GamePath, SettingForm);
+            await Toast.CreateAsync("Save successfully", new()
+            {
+                Variant = ToastVariant.Success,
+            });
+        }
+        else
+        {
+            await Toast.CreateAsync("Settings contain invalid values", new()
+            {
+                Variant = ToastVariant.Danger,
+            });
+        }
+    }
 }
