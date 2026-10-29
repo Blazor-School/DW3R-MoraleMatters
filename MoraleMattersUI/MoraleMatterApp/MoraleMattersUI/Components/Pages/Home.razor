@@ -5,9 +5,9 @@
 @inject IServiceProvider ServiceProvider
 @implements IDisposable
 
-<main class="wa-stack content-padding">
-    <EditForm EditContext="GameFolderEditContext">
-        <RoarCard>
+<main class="wa-stack content-padding settings-page">
+    <EditForm EditContext="GameFolderEditContext" style="flex-shrink: 0;">
+        <RoarCard Appreance="CardAppreance.FilledOutlined">
             <DataAnnotationsValidator />
             <div class="wa-cluster wa-flex-nowrap">
                 <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="folder" />
@@ -18,16 +18,16 @@
             <ValidationMessage For="() => GameFolderForm.GamePath" />
         </RoarCard>
     </EditForm>
-    <div class="wa-flank:end wa-align-items-start" style="--flank-size: 30rem;">
-        <RoarCard>
-            <div class="wa-flank">
+    <div class="wa-flank:end wa-align-items-stretch wa-flex-nowrap" style="--flank-size: 30rem; flex: 1; min-height: 0;">
+        <RoarCard class="settings-card" Appreance="CardAppreance.FilledOutlined">
+            <div class="wa-flank" style="flex-shrink: 0;">
                 <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="gear" />
                 <div class="wa-heading-xl">Mod Settings</div>
             </div>
 
             @if (string.IsNullOrEmpty(LocalModVersion))
             {
-                <div class="wa-stack wa-text-center wa-align-items-center wa-justify-content-center wa-gap-l" style="min-height: 40rem;">
+                <div class="wa-stack wa-text-center wa-align-items-center wa-justify-content-center wa-gap-l" style="flex: 1; min-height: 0; overflow-y: auto;">
                     <RoarIcon Name="sliders" class="wa-border-radius-l" style="font-size: 3rem;" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" />
 
                     <div class="wa-heading-l">Install MoraleMatters to get started</div>
@@ -45,9 +45,9 @@
             }
             else
             {
-                <EditForm EditContext="SettingEditContext" class="wa-stack">
-                    <div class="wa-stack" style="margin-top: 1rem;">
-                        <RoarDetails>
+                <EditForm EditContext="SettingEditContext" class="wa-stack" style="flex: 1; min-height: 0;">
+                    <div class="wa-stack" style="flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable;">
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
                                     <RoarIcon Name="hand-fist" />
@@ -226,7 +226,7 @@
                                 </div>
                             </div>
                         </RoarDetails>
-                        <RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
                                     <RoarIcon Name="brain" />
@@ -441,7 +441,7 @@
                                 </div>
                             </div>
                         </RoarDetails>
-                        <RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
                                     <RoarIcon Name="burger" />
@@ -464,7 +464,7 @@
                                 </div>
                             </div>
                         </RoarDetails>
-                        <RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
                                     <RoarIcon Name="person-harassing" />
@@ -529,7 +529,7 @@
                                 </div>
                             </div>
                         </RoarDetails>
-                        <RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
                                     <RoarIcon Name="shield-halved" />
@@ -604,7 +604,7 @@
                                 </div>
                             </div>
                         </RoarDetails>
-                        <RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
                                     <RoarIcon Name="person-walking-arrow-right" />
@@ -651,7 +651,7 @@
                                 </div>
                             </div>
                         </RoarDetails>
-                        <RoarDetails Summary="HUD, alerts &amp; reports">
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
                                     <RoarIcon Name="display" />
@@ -803,8 +803,8 @@
                 </EditForm>
             }
         </RoarCard>
-        <div class="wa-stack">
-            <RoarCard Orientation="CardOrientation.Vertical">
+        <div class="wa-stack" style="min-height: 0; overflow-y: auto;">
+            <RoarCard Orientation="CardOrientation.Vertical" Appreance="CardAppreance.FilledOutlined">
                 <div class="wa-flank">
                     <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="download" />
                     <div class="wa-split">
@@ -833,7 +833,7 @@
                 @if (SelectedModAsset is not null)
                 {
                     <div class="wa-body">Changelog</div>
-                    <RoarCard>
+                    <RoarCard Appreance="CardAppreance.FilledOutlined">
                         @SelectedModAsset.NotesMarkdown
                     </RoarCard>
                 }
@@ -850,7 +850,7 @@
                 }
             </RoarCard>
 
-            <RoarCard Orientation="CardOrientation.Vertical">
+            <RoarCard Orientation="CardOrientation.Vertical" Appreance="CardAppreance.FilledOutlined">
                 <div class="wa-stack">
                     <div class="wa-flank">
                         <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Warning].Color" Name="circle-info" />
