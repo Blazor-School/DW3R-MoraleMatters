@@ -51,6 +51,7 @@
         theme.Token.Light.TextLink = "var(--wa-color-brand-40)";
         theme.Token.Light.Focus = "var(--wa-color-brand-50)";
 
+        ThemeService.Mode = AppInfo.Current.RequestedTheme is AppTheme.Dark ? "dark" : "light";
         ThemeService.LoadTheme(theme);
     }
 }

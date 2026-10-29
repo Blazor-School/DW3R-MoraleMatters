@@ -1,3 +1,67 @@
+html {
+    height: 100%;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+#app {
+    flex: 1;
+    min-height: 0;
+}
+
+.app-page {
+    height: 100%;
+    min-height: 0;
+}
+
+    .app-page::part(page) {
+        height: 100%;
+        min-height: 0;
+    }
+
+    .app-page::part(body) {
+        min-height: 0;
+        align-items: stretch;
+    }
+
+    .app-page::part(main) {
+        min-height: 0;
+    }
+
+    .app-page::part(main-content) {
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+.settings-page {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
+}
+
+.settings-card {
+    min-width: 0;
+    min-height: 0;
+}
+
+    .settings-card::part(body) {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wa-space-m);
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+
 h1:focus {
     outline: none;
 }
@@ -60,6 +124,7 @@ h1:focus {
 
 .status-bar-safe-area {
     display: flex;
+    flex-shrink: 0;
     position: sticky;
     top: 0;
     height: env(safe-area-inset-top, 0px);
@@ -71,3 +136,22 @@ h1:focus {
 .flex-column, .navbar-brand {
     padding-left: env(safe-area-inset-left, 0px);
 }
+
+.content-padding {
+    padding-block: 0;
+}
+
+.full-width {
+    width: 100%;
+}
+
+.table-input {
+    width: 100%;
+    table-layout: fixed;
+}
+
+    .table-input wa-number-input {
+        display: block;
+        width: 100%;
+        min-width: 0;
+    }

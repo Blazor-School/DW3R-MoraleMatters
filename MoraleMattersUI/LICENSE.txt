@@ -1,0 +1,159 @@
+MoraleMattersUI Attribution License
+Version 1.0
+
+Copyright (c) 2026 Blazor Innovations
+
+1. SCOPE
+
+"Software" means the original MoraleMattersUI application code and
+accompanying materials made available under this License.
+
+"Covered Application" means the Software, a modified version of the
+Software, or another application incorporating a substantial portion
+of the Software.
+
+This License does not cover RoarUI, other separately licensed
+dependencies, game content, or the MoraleMatters mod itself unless
+those materials are expressly designated as covered by this License.
+Those materials remain subject to their respective terms.
+
+2. PERMISSIONS
+
+Subject to this License, the copyright holder grants you a worldwide,
+non-exclusive, royalty-free copyright license to use, reproduce,
+study, modify, publicly display, distribute, and sell copies of the
+Software, in source or executable form, including as part of a
+Covered Application.
+
+Personal, educational, organizational, and commercial uses are
+permitted. You may keep your modifications private. Distribution
+of executable copies does not require distribution of source code.
+
+3. REQUIRED VISIBLE CREDIT
+
+Every Covered Application that you distribute to another person
+must display the following exact credit:
+
+    Built with RoarUI
+
+The credit must appear either:
+
+(a) on the application's main screen; or
+
+(b) on an About or Credits screen directly accessible through a
+    clearly labeled item in the application's main navigation
+    or main menu.
+
+The credit must be readable, accessible to assistive technology
+where supported, and presented with reasonable size and contrast.
+It must not require payment, special privileges, or access to
+source code to view.
+
+A credit appearing only in source comments, a license file,
+external documentation, or a temporary startup screen does not
+satisfy this requirement for an application with a graphical
+user interface.
+
+You may change the credit's font, color, and layout to match the
+application, provided the wording and visibility are preserved.
+No logo is required.
+
+If a Covered Application has no graphical user interface, include
+the credit prominently in its normal help or version output and
+in its accompanying documentation.
+
+If you distribute source code, include the credit prominently in
+the primary README or equivalent introductory documentation.
+The source must retain or implement the credit required for the
+resulting Covered Application.
+
+Renaming the application or replacing or removing its RoarUI
+dependency does not remove this attribution obligation. If the
+Covered Application no longer uses RoarUI, display the following
+clarification immediately alongside the required credit:
+
+    Credit refers to the original MoraleMattersUI application;
+    this version no longer uses RoarUI.
+
+4. LICENSE AND COPYRIGHT NOTICES
+
+Include a copy of this License and retain applicable copyright
+notices in every distribution of the Software or a substantial
+portion of it.
+
+For executable distributions, these materials may be included
+in accompanying license files or an accessible legal-notices
+screen.
+
+You may license your original modifications under additional or
+different terms, provided those terms do not remove or restrict
+the rights granted here over the original Software or prevent
+compliance with this License.
+
+Every recipient receives rights to the original Software directly
+from its copyright holder under this License.
+
+5. MODIFIED VERSIONS AND ENDORSEMENT
+
+Redistributed modified versions must identify themselves as
+modified versions in their About screen, accompanying
+documentation, or both.
+
+You must not represent a modified version as an official release
+of the original copyright holder or imply endorsement by the
+creators of MoraleMattersUI or RoarUI without permission.
+
+To the extent controlled by the copyright holder, permission is
+granted to use the MoraleMattersUI and RoarUI names as reasonably
+necessary to provide the required credit and accurately describe
+the Software's origin. No broader trademark rights are granted.
+
+6. SEPARATELY LICENSED COMPONENTS
+
+This License grants no additional rights to RoarUI or any other
+separately licensed component.
+
+Recipients who develop, modify, or redistribute a Covered
+Application containing those components must obtain any rights
+required by their applicable licenses.
+
+No separate MoraleMattersUI license fee is required merely to
+run a compliant copy of a Covered Application.
+
+Nothing in this License restricts a copyright holder's exercise
+of rights they already own.
+
+7. TERMINATION
+
+Your permissions under this License terminate automatically if
+you fail to correct a violation within 30 days after becoming
+aware of it.
+
+Termination does not terminate the rights of recipients who
+received copies under this License and remain in compliance.
+
+After termination, reinstatement requires written permission
+from the copyright holder.
+
+8. DISCLAIMER OF WARRANTY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE
+IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR
+A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
+
+9. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE COPYRIGHT
+HOLDERS AND CONTRIBUTORS SHALL NOT BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS
+USE, WHETHER IN CONTRACT, TORT, OR OTHERWISE.
+
+10. OTHER ARRANGEMENTS
+
+The copyright holder may separately grant exceptions or offer
+the Software under other terms. No exception is granted merely
+because this possibility exists.
+
+This License does not limit rights available under applicable
+law independently of this License.

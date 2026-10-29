@@ -94,7 +94,7 @@ foreach ($document in @('README.md', 'VERIFICATION.md', 'LICENSE.txt')) {
     if (Test-Path -LiteralPath (Join-Path $projectRoot $document)) { Copy-Item -LiteralPath (Join-Path $projectRoot $document) -Destination $packageRoot -Force }
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'vendor\minhook\LICENSE.txt') -Destination (Join-Path $packageRoot 'MinHook-LICENSE.txt') -Force
-$archive = Join-Path $projectRoot 'MoraleMatters-v1.7.1.zip'
+$archive = Join-Path $projectRoot 'MoraleMatters-v1.7.2.zip'
 Compress-Archive -Path (Join-Path $packageRoot '*') -DestinationPath $archive -Force
 if ($Install) {
     if (Get-Process -Name 'DW3CE_RE-Win64-Shipping' -ErrorAction SilentlyContinue) { throw 'Close the game before installing.' }

@@ -1,3 +1,1013 @@
 ﻿@page "/"
+@inject ThemeService ThemeService
+@inject ModService ModService
+@inject AppUpdateService AppUpdateService
+@inject IFolderPicker NativeFolderPicker
+@inject IServiceProvider ServiceProvider
+@implements IDisposable
 
-<RoarButton Variant="ButtonVariant.Brand">Hello</RoarButton>
+<main class="wa-stack content-padding settings-page">
+    @if (AppUpdateService.ReadyUpdate is VelopackAsset update)
+    {
+        <RoarCard Appreance="CardAppreance.FilledOutlined" style="flex-shrink: 0;">
+            <div class="wa-cluster">
+                <span>MoraleMatters UI @update.Version is ready to install.</span>
+                <RoarButton Variant="ButtonVariant.Brand" Disabled="@InstallLoading" @onclick="AppUpdateService.RestartToUpdate">Restart to update</RoarButton>
+            </div>
+        </RoarCard>
+    }
+    <EditForm EditContext="GameFolderEditContext" style="flex-shrink: 0;">
+        <RoarCard Appreance="CardAppreance.FilledOutlined">
+            <DataAnnotationsValidator />
+            <div class="wa-cluster wa-flex-nowrap">
+                <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="folder" />
+                <label>Game folder</label>
+                <RoarInputText style="flex-grow: 1" @bind-Value="GameFolderForm.GamePath" ReadOnly />
+                <RoarButton @onclick="BrowseGameFolderAsync" Variant="ButtonVariant.Brand">Browse</RoarButton>
+            </div>
+            <ValidationMessage For="() => GameFolderForm.GamePath" />
+        </RoarCard>
+    </EditForm>
+    <div class="wa-flank:end wa-align-items-stretch wa-flex-nowrap" style="--flank-size: 30rem; flex: 1; min-height: 0;">
+        <RoarCard class="settings-card" Appreance="CardAppreance.FilledOutlined">
+            <div class="wa-flank" style="flex-shrink: 0;">
+                <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="gear" />
+                <div class="wa-heading-xl">Mod Settings</div>
+            </div>
+
+            @if (string.IsNullOrEmpty(LocalModVersion))
+            {
+                <div class="wa-stack wa-text-center wa-align-items-center wa-justify-content-center wa-gap-l" style="flex: 1; min-height: 0; overflow-y: auto;">
+                    <RoarIcon Name="sliders" class="wa-border-radius-l" style="font-size: 3rem;" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" />
+
+                    <div class="wa-heading-l">Install MoraleMatters to get started</div>
+
+                    <div class="wa-body">
+                        <span>Choose a version in the panel on the right.</span>
+                        <p>Your mod settings will appear here after installation.</p>
+                    </div>
+
+                    <div class="wa-cluster wa-justify-content-center">
+                        <RoarIcon Size="@IconSize.L" Name="lock" />
+                        <span>Settings unavailable until the mod is installed.</span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <EditForm EditContext="SettingEditContext" class="wa-stack" style="flex: 1; min-height: 0;">
+                    <div class="wa-stack" style="flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable;">
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
+                                    <RoarIcon Name="hand-fist" />
+                                    Combat settings
+                                </div>
+                                <div class="wa-body-s">The higher the morale, the more effective the unit's combat abilities. Affect both allies and enemies.</div>
+                            </div>
+                            <div class="wa-stack">
+                                <div class="wa-stack wa-gap-xs">
+                                    <RoarSwitch @bind-Value="SettingForm.CombatEnabled" Hint="Scale ordinary combat damage and native AI attack waits according to corps morale.">Combat scaling</RoarSwitch>
+                                    <ValidationMessage For="() => SettingForm.CombatEnabled" />
+                                </div>
+                                <div class="wa-body-s">Each row sets the combat effects at its configured morale point. Effects change gradually between points. Below the first point or above the last point, the nearest row's effects apply.</div>
+                                <div class="wa-body-s">Example with default settings: At 300 morale, effects are halfway between the 200 and 400 morale rows. Damage dealt is halfway between 0.55 and 1.00, giving a multiplier of 0.775.</div>
+                                <div style="overflow-x: auto;">
+                                    <table class="table-input">
+                                        <caption class="wa-visually-hidden">Combat scaling by morale tier</caption>
+                                        <thead>
+                                            <tr>
+                                                <th id="combat-tier-header" scope="col" tabindex="0">Morale tier</th>
+                                                <th id="combat-points-header" scope="col" tabindex="0">Morale points</th>
+                                                <th id="combat-damage-dealt-header" scope="col" tabindex="0">Damage dealt</th>
+                                                <th id="combat-damage-taken-header" scope="col" tabindex="0">Damage taken</th>
+                                                <th id="combat-attack-frequency-header" scope="col" tabindex="0">Attack frequency</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <th scope="row">
+                                                    <div class="wa-body">Very low</div>
+                                                    <div class="wa-body">At @SettingForm.CombatVeryLowMorale morale</div>
+                                                </th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryLowMorale" Label="Very Low Morale" min="1" max="@(SettingForm.CombatLowMorale - 1)" step="1" />
+                                                    <ValidationMessage For="() => SettingForm.CombatVeryLowMorale" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryLowDamageDealt" Label="Very Low Damage Dealt" min="0.05" max="10" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatVeryLowDamageDealt" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryLowDamageTaken" Label="Very Low Damage Taken" min="0.05" max="10" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatVeryLowDamageTaken" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryLowAttackFrequency" Label="Very Low Attack Frequency" min="0.1" max="5" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatVeryLowAttackFrequency" />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">
+                                                    <div class="wa-body">Low</div>
+                                                    <div class="wa-body">At @SettingForm.CombatLowMorale morale</div>
+                                                </th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatLowMorale" Label="Low Morale" min="@(SettingForm.CombatVeryLowMorale + 1)" max="@(SettingForm.CombatReferenceMorale - 1)" step="1" />
+                                                    <ValidationMessage For="() => SettingForm.CombatLowMorale" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatLowDamageDealt" Label="Low Damage Dealt" min="0.05" max="10" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatLowDamageDealt" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatLowDamageTaken" Label="Low Damage Taken" min="0.05" max="10" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatLowDamageTaken" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatLowAttackFrequency" Label="Low Attack Frequency" min="0.1" max="5" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatLowAttackFrequency" />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">
+                                                    <div class="wa-body">Normal</div>
+                                                    <div class="wa-body">At @SettingForm.CombatReferenceMorale morale</div>
+                                                </th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatReferenceMorale" Label="Reference Morale" min="@(SettingForm.CombatLowMorale + 1)" max="@(SettingForm.CombatHighMorale - 1)" step="1" />
+                                                    <ValidationMessage For="() => SettingForm.CombatReferenceMorale" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatReferenceDamageDealt" Label="Reference Damage Dealt" min="0.05" max="10" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatReferenceDamageDealt" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatReferenceDamageTaken" Label="Reference Damage Taken" min="0.05" max="10" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatReferenceDamageTaken" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatReferenceAttackFrequency" Label="Reference Attack Frequency" min="0.1" max="5" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatReferenceAttackFrequency" />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">
+                                                    <div class="wa-body">High</div>
+                                                    <div class="wa-body">At @SettingForm.CombatHighMorale morale</div>
+                                                </th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatHighMorale" Label="High Morale" min="@(SettingForm.CombatReferenceMorale + 1)" max="@(SettingForm.CombatVeryHighMorale - 1)" step="1" />
+                                                    <ValidationMessage For="() => SettingForm.CombatHighMorale" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatHighDamageDealt" Label="High Damage Dealt" min="0.05" max="10" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatHighDamageDealt" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatHighDamageTaken" Label="High Damage Taken" min="0.05" max="10" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatHighDamageTaken" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatHighAttackFrequency" Label="High Attack Frequency" min="0.1" max="5" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatHighAttackFrequency" />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">
+                                                    <div class="wa-body">Very high</div>
+                                                    <div class="wa-body">At @SettingForm.CombatVeryHighMorale morale</div>
+                                                </th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryHighMorale" Label="Very High Morale" min="@(SettingForm.CombatHighMorale + 1)" max="899" step="1" />
+                                                    <ValidationMessage For="() => SettingForm.CombatVeryHighMorale" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryHighDamageDealt" Label="Very High Damage Dealt" min="0.05" max="10" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatVeryHighDamageDealt" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryHighDamageTaken" Label="Very High Damage Taken" min="0.05" max="10" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatVeryHighDamageTaken" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.CombatVeryHighAttackFrequency" Label="Very High Attack Frequency" min="0.1" max="5" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.CombatVeryHighAttackFrequency" />
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <RoarTooltip For="combat-tier-header">The five combat scaling tiers, from very low to very high morale.</RoarTooltip>
+                                    <RoarTooltip For="combat-points-header">Native morale points for each scaling anchor. Effects interpolate between anchors.</RoarTooltip>
+                                    <RoarTooltip For="combat-damage-dealt-header">Outgoing damage multiplier. 1 means normal damage; 2 doubles the coefficient.</RoarTooltip>
+                                    <RoarTooltip For="combat-damage-taken-header">Incoming damage multiplier. 1 means normal damage; 0.5 halves the coefficient.</RoarTooltip>
+                                    <RoarTooltip For="combat-attack-frequency-header">The attack rate, not the animation speed. Value from 1 to 5.</RoarTooltip>
+                                </div>
+                                <div class="wa-stack wa-gap-xs">
+                                    <RoarSlider @bind-Value="SettingForm.CombatNamedOfficerStrength" Hint="Strength of combat scaling and native AI profile shifts for named officers" Min="0" Max="1" Label="Named officer effect strength" Step="0.01" WithTooltip>
+                                        <span slot="@SliderSlot.Reference">Neutral</span>
+                                        <span slot="@SliderSlot.Reference">Full effect</span>
+                                    </RoarSlider>
+                                    <ValidationMessage For="() => SettingForm.CombatNamedOfficerStrength" />
+                                </div>
+                                <div class="wa-stack">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.CasualtiesEnabled" Hint="Corps will lose morale when units are defeated.">Casualty morale penalties</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.CasualtiesEnabled" />
+                                    </div>
+                                </div>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.CasualtiesSoldier" Hint="Corps morale points lost per ordinary soldier killed." Label="Soldier" min="0" max="898" step="1" />
+                                        <ValidationMessage For="() => SettingForm.CasualtiesSoldier" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.CasualtiesElite" Hint="Corps morale points lost per elite soldier killed." Label="Elite" min="0" max="898" step="1" />
+                                        <ValidationMessage For="() => SettingForm.CasualtiesElite" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.CasualtiesCaptain" Hint="Corps morale points lost when a generic group captain is defeated." Label="Captain" min="0" max="898" step="1" />
+                                        <ValidationMessage For="() => SettingForm.CasualtiesCaptain" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.CasualtiesSubordinateOfficer" Hint="Corps morale points lost when a subordinate named officer is defeated; corps commander defeat keeps its native outcome." Label="Subordinate Officer" min="0" max="898" step="1" />
+                                        <ValidationMessage For="() => SettingForm.CasualtiesSubordinateOfficer" />
+                                    </div>
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
+                                    <RoarIcon Name="brain" />
+                                    Behavior settings
+                                </div>
+                                <div class="wa-body-s">Morale shapes how units fight, hold formation, regroup and recover.</div>
+                            </div>
+                            <div class="wa-stack">
+                                <div class="wa-stack wa-gap-xs">
+                                    <RoarSwitch @bind-Value="SettingForm.BehaviorEnabled" Hint="Enable the behavior features below, including phased regrouping.">Morale-driven behavior</RoarSwitch>
+                                    <ValidationMessage For="() => SettingForm.BehaviorEnabled" />
+                                </div>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 14rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.BehaviorAIProfiles" Hint="Affect aggression, guarding and supported evasion.">AI decision profiles</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.BehaviorAIProfiles" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.BehaviorFormationCohesion" Hint="Adjust infantry spacing while keeping strategic orders.">Formation cohesion</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.BehaviorFormationCohesion" />
+                                    </div>
+                                </div>
+                                <div class="wa-body-s">Effects change gradually between very low morale and very high morale.</div>
+                                <div style="overflow-x: auto;">
+                                    <table class="table-input" style="min-width: 32rem;">
+                                        <caption class="wa-visually-hidden">Behavior effects by morale tier</caption>
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Morale tier</th>
+                                                <th id="behavior-profile-header" scope="col" tabindex="0">AI profile shift</th>
+                                                <th id="behavior-spacing-header" scope="col" tabindex="0">Formation spacing</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <th scope="row">
+                                                    <div class="wa-body">Very low</div>
+                                                </th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.BehaviorLowMoraleProfileShift" Label="Very low morale AI profile shift" min="-19" max="0" step="1" />
+                                                    <ValidationMessage For="() => SettingForm.BehaviorLowMoraleProfileShift" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.BehaviorLowMoraleFormationScale" Label="Very low morale formation spacing" min="1" max="2" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.BehaviorLowMoraleFormationScale" />
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <th scope="row">
+                                                    <div class="wa-body">Very high</div>
+                                                </th>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.BehaviorHighMoraleProfileShift" Label="Very high morale AI profile shift" min="0" max="19" step="1" />
+                                                    <ValidationMessage For="() => SettingForm.BehaviorHighMoraleProfileShift" />
+                                                </td>
+                                                <td>
+                                                    <RoarInputNumber class="wa-visually-hidden-label" Size="InputSize.S" @bind-Value="SettingForm.BehaviorHighMoraleFormationScale" Label="Very high morale formation spacing" min="0.5" max="1" step="0.05" />
+                                                    <ValidationMessage For="() => SettingForm.BehaviorHighMoraleFormationScale" />
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <RoarTooltip For="behavior-profile-header">Lower profile means less blocking chance, pause longer between actions. Shift in the native AI decision profile. Negative values reduce the profile; positive values increase it. The final shift is rounded and limited to the unit's native profile family.</RoarTooltip>
+                                    <RoarTooltip For="behavior-spacing-header">Formation spacing multiplier. 1 is normal spacing; values above 1 spread infantry out, and values below 1 bring them closer.</RoarTooltip>
+                                </div>
+                                <div class="wa-body-s">A spacing multiplier of 1.00 is normal. Named officer profile shifts use the effect strength in Combat settings.</div>
+                                <RoarDivider />
+                                <div class="wa-stack">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.BehaviorLocalRegroup" Disabled="@(!SettingForm.BehaviorEnabled)" Hint="Ordinary infantry regroup at low morale or after defeat shock. Named officers keep their strategic orders.">Infantry regrouping</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.BehaviorLocalRegroup" />
+                                    </div>
+                                    <div class="wa-grid wa-align-items-start" style="--min-column-size: 10rem;">
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorRegroupBelowPercent" OnInput="ValidateBehaviorRegroup" Label="Start at or below" min="0" max="50" step="1">
+                                                <span slot="@InputSlot.End">%</span>
+                                            </RoarInputNumber>
+                                            <ValidationMessage For="() => SettingForm.BehaviorRegroupBelowPercent" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorRegroupRecoverPercent" OnInput="ValidateBehaviorRegroup" Label="End early at" min="0" max="80" step="1">
+                                                <span slot="@InputSlot.End">%</span>
+                                            </RoarInputNumber>
+                                            <ValidationMessage For="() => SettingForm.BehaviorRegroupRecoverPercent" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorRegroupSeconds" Hint="Includes fall-back, reform and rejoin phases when enabled." Label="Regroup duration" min="1" max="30" step="1">
+                                                <span slot="@InputSlot.End">s</span>
+                                            </RoarInputNumber>
+                                            <ValidationMessage For="() => SettingForm.BehaviorRegroupSeconds" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorRegroupCooldownSeconds" Label="Cooldown after regroup" min="5" max="120" step="1">
+                                                <span slot="@InputSlot.End">s</span>
+                                            </RoarInputNumber>
+                                            <ValidationMessage For="() => SettingForm.BehaviorRegroupCooldownSeconds" />
+                                        </div>
+                                    </div>
+                                    <RoarDivider />
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.BattlefieldPhasedRegroup" Hint="Split local infantry regrouping into fall-back, reform and rejoin phases.">Fall back, reform and rejoin</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.BattlefieldPhasedRegroup" />
+                                    </div>
+                                    <div class="wa-grid wa-align-items-start" style="--min-column-size: 12rem;">
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BattlefieldReformFormationScale" Hint="Spacing multiplier during the reform phase; 0.45 is 45% of normal spacing." Label="Reform formation spacing" min="0.25" max="1" step="0.05" />
+                                            <ValidationMessage For="() => SettingForm.BattlefieldReformFormationScale" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BattlefieldWithdrawalDistanceMetres" Hint="Maximum shift toward a nearby living commander during phased regrouping." Label="Withdrawal distance" min="0" max="15" step="1">
+                                                <span slot="@InputSlot.End">m</span>
+                                            </RoarInputNumber>
+                                            <ValidationMessage For="() => SettingForm.BattlefieldWithdrawalDistanceMetres" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <RoarDivider />
+                                <div class="wa-stack">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.BehaviorDefeatPanic" Hint="A defeated subordinate leader can cause extra corps morale loss and temporary shock nearby.">Panic after nearby defeats</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.BehaviorDefeatPanic" />
+                                    </div>
+                                    <div class="wa-grid wa-align-items-start" style="--min-column-size: 12rem;">
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorPanicRadiusMetres" Label="Panic radius" min="1" max="100" step="1">
+                                                <span slot="@InputSlot.End">m</span>
+                                            </RoarInputNumber>
+                                            <ValidationMessage For="() => SettingForm.BehaviorPanicRadiusMetres" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorPanicMoraleLoss" Label="Base morale loss (points)" min="0" max="100" step="1" />
+                                            <ValidationMessage For="() => SettingForm.BehaviorPanicMoraleLoss" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorPanicShockSeconds" Label="Base shock duration" min="0" max="30" step="1">
+                                                <span slot="@InputSlot.End">s</span>
+                                            </RoarInputNumber>
+                                            <ValidationMessage For="() => SettingForm.BehaviorPanicShockSeconds" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorPanicWindowSeconds" Label="Loss budget window" min="1" max="60" step="1">
+                                                <span slot="@InputSlot.End">s</span>
+                                            </RoarInputNumber>
+                                            <ValidationMessage For="() => SettingForm.BehaviorPanicWindowSeconds" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorPanicWindowCap" Label="Loss cap per window (points)" min="0" max="200" step="1" />
+                                            <ValidationMessage For="() => SettingForm.BehaviorPanicWindowCap" />
+                                        </div>
+                                    </div>
+                                    <div class="wa-body-s">The cap limits extra panic losses per corps. Morale and commander protection can reduce the effect.</div>
+                                </div>
+                                <RoarDivider />
+                                <div class="wa-stack">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.BehaviorMoraleRecovery" Hint="Recover base morale while the entire corps is out of simulated combat.">Passive morale recovery</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.BehaviorMoraleRecovery" />
+                                    </div>
+                                    <div class="wa-grid wa-align-items-start" style="--min-column-size: 12rem;">
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorRecoveryPerSecond" Hint="Corps commanders can influence this value even further." Label="Base recovery (points / s)" min="0" max="10" step="0.1" />
+                                            <ValidationMessage For="() => SettingForm.BehaviorRecoveryPerSecond" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorRecoveryCeiling" Hint="Stopped recovery past this value." Label="Recovery ceiling (points)" min="1" max="899" step="1" />
+                                            <ValidationMessage For="() => SettingForm.BehaviorRecoveryCeiling" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorRecoveryDelaySeconds" Hint="Morale starts recovery after out of combat." Label="Delay out of combat" min="1" max="120" step="1">
+                                                <span slot="@InputSlot.End">s</span>
+                                            </RoarInputNumber>
+                                            <ValidationMessage For="() => SettingForm.BehaviorRecoveryDelaySeconds" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <RoarDivider />
+                                <div class="wa-stack">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.BehaviorCommanderLeadership" Hint="A nearby living corps commander reduces panic, stabilizes formations and improves recovery.">Commander leadership</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.BehaviorCommanderLeadership" />
+                                    </div>
+                                    <div class="wa-grid wa-align-items-start" style="--min-column-size: 12rem;">
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorCommanderRadiusMetres" Label="Commander radius" min="1" max="100" step="1">
+                                                <span slot="@InputSlot.End">m</span>
+                                            </RoarInputNumber>
+                                            <ValidationMessage For="() => SettingForm.BehaviorCommanderRadiusMetres" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorCommanderRecoveryMultiplier" Hint="Applies at full commander proximity." Label="Recovery multiplier" min="0.5" max="4" step="0.1" />
+                                            <ValidationMessage For="() => SettingForm.BehaviorCommanderRecoveryMultiplier" />
+                                        </div>
+                                        <div class="wa-stack wa-gap-xs">
+                                            <RoarInputNumber Size="InputSize.S" @bind-Value="SettingForm.BehaviorCommanderPanicMultiplier" Label="Panic multiplier" min="0" max="1" step="0.1" />
+                                            <ValidationMessage For="() => SettingForm.BehaviorCommanderPanicMultiplier" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <RoarDivider />
+                                <h3 class="wa-heading-s">Enemy corps proximity</h3>
+                                <RoarSwitch @bind-Value="SettingForm.EnemyProximityEnabled" Hint="Give temporary morale to enemy corps whose living corps leaders are close to one another.">Enemy corps proximity support</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.EnemyProximityEnabled" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.EnemyProximityRadiusMetres" Hint="Maximum distance in metres between two living leaders of different enemy corps for mutual support." Label="Radius metres" min="1" max="200" step="1" />
+                                        <ValidationMessage For="() => SettingForm.EnemyProximityRadiusMetres" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.EnemyProximityMoraleBonus" Hint="Temporary morale points while another qualifying enemy corps leader is nearby; extra neighbours do not stack." Label="Morale bonus" min="0" max="898" step="1" />
+                                        <ValidationMessage For="() => SettingForm.EnemyProximityMoraleBonus" />
+                                    </div>
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
+                                    <RoarIcon Name="burger" />
+                                    Item drops
+                                </div>
+                                <div class="wa-body-s">Adjust drop rate of meat buns and arrows.</div>
+                            </div>
+                            <div class="wa-stack">
+                                <RoarSwitch @bind-Value="SettingForm.DropsEnabled" Hint="Enable custom drop rate.">Custom random drops</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.DropsEnabled" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.DropsComboHits" Hint="Minimum combo hits on the defeated unit before its random item drop can occur." Label="Minimum combo hits" min="1" max="999" step="1" />
+                                        <ValidationMessage For="() => SettingForm.DropsComboHits" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.DropsMeatBunPercent" Hint="Chance of a small meat bun for the random drop; the remaining chance is arrows." Label="Meat bun chance (%)" min="0" max="100" step="1" />
+                                        <ValidationMessage For="() => SettingForm.DropsMeatBunPercent" />
+                                    </div>
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
+                                    <RoarIcon Name="person-harassing" />
+                                    Rally allies
+                                </div>
+                                <div class="wa-body-s">Temporary morale and healing when you approach an allied officer.</div>
+                            </div>
+                            <div class="wa-stack">
+                                <RoarSwitch @bind-Value="SettingForm.SupportEnabled" Hint="Let encountering an allied officer grant temporary corps morale and restore that officer&#39;s health.">Allied support</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.SupportEnabled" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.SupportEncounterRadiusMetres" Hint="Enter this distance in metres from an allied officer to trigger an eligible support encounter." Label="Encounter radius" min="0.1" max="1000" step="0.1">
+                                            <span slot="@InputSlot.End">m</span>
+                                        </RoarInputNumber>
+                                        <ValidationMessage For="() => SettingForm.SupportEncounterRadiusMetres" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.SupportExitRadiusMetres" Hint="Move beyond this distance in metres to rearm the encounter; active bonuses and healing cooldowns still apply." Label="Rearm distance" min="0.1" max="1000" step="0.1">
+                                            <span slot="@InputSlot.End">m</span>
+                                        </RoarInputNumber>
+                                        <ValidationMessage For="() => SettingForm.SupportExitRadiusMetres" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.SupportMoraleBonus" Hint="Temporary morale points granted to the allied officer&#39;s corps; an active support bonus cannot stack or refresh." Label="Morale bonus" min="0" max="898" step="1">
+                                        </RoarInputNumber>
+                                        <ValidationMessage For="() => SettingForm.SupportMoraleBonus" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.SupportDurationSeconds" Hint="Battle seconds the temporary support morale bonus lasts." Label="Bonus duration" min="1" max="86400" step="1">
+                                            <span slot="@InputSlot.End">s</span>
+                                        </RoarInputNumber>
+                                        <ValidationMessage For="() => SettingForm.SupportDurationSeconds" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.SupportHealFraction" Hint="Fraction of the allied officer&#39;s maximum health restored on an eligible encounter; 0.5 means 50%." Label="Healing fraction" min="0" max="1" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.SupportHealFraction" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.SupportHealCooldownSeconds" Hint="Battle seconds before the same officer can receive another successful support heal." Label="Healing cooldown" min="1" max="86400" step="1">
+                                            <span slot="@InputSlot.End">s</span>
+                                        </RoarInputNumber>
+                                        <ValidationMessage For="() => SettingForm.SupportHealCooldownSeconds" />
+                                    </div>
+                                </div>
+                                <h3 class="wa-heading-s">Support popups</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputText @bind-Value="SettingForm.SupportMoraleText" Hint="In-game popup text shown above an allied officer when a support morale bonus is granted." Label="Morale text" />
+                                        <ValidationMessage For="() => SettingForm.SupportMoraleText" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputText @bind-Value="SettingForm.SupportHealText" Hint="In-game popup text shown above an allied officer when support restores health." Label="Heal text" />
+                                        <ValidationMessage For="() => SettingForm.SupportHealText" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.SupportPopupSeconds" Hint="Duration in seconds for the support popup above the officer." Label="Popup duration" min="0.5" max="15" step="0.1">
+                                            <span slot="@InputSlot.End">s</span>
+                                        </RoarInputNumber>
+                                        <ValidationMessage For="() => SettingForm.SupportPopupSeconds" />
+                                    </div>
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
+                                    <RoarIcon Name="shield-halved" />
+                                    Off-screen battles &amp; reinforcements
+                                </div>
+                                <div class="wa-body-s">Distant combat, confirmed kill rewards, reinforcement waves and surprise forces.</div>
+                            </div>
+                            <div class="wa-stack">
+                                <RoarSwitch @bind-Value="SettingForm.OffscreenEnabled" Hint="Apply the mod&#39;s named-officer damage sharing during off-screen combat.">Off-screen officer damage sharing</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.OffscreenEnabled" />
+                                <h3 class="wa-heading-s">Off-screen officer damage</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.OffscreenOfficerDamageShare" Hint="Fraction of existing group damage assigned to its named officer while troops remain; 0.25 means 25%." Label="Officer damage fraction" min="0" max="1" step="0.05" />
+                                        <ValidationMessage For="() => SettingForm.OffscreenOfficerDamageShare" />
+                                    </div>
+                                </div>
+                                <RoarDivider />
+                                <h3 class="wa-heading-s">Off-screen kill rewards</h3>
+                                <RoarSwitch @bind-Value="SettingForm.OffscreenKillRewardsEnabled" Hint="Top up the winning corps&#39; permanent morale for confirmed off-screen kills after crediting native rewards.">Off-screen kill morale rewards</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.OffscreenKillRewardsEnabled" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsSoldier" Hint="Target morale reward per ordinary soldier defeated off-screen, in native morale points." Label="Soldier" min="0" max="898" step="0.05" />
+                                        <ValidationMessage For="() => SettingForm.OffscreenKillRewardsSoldier" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsElite" Hint="Target morale reward per elite soldier defeated off-screen, in native morale points." Label="Elite" min="0" max="898" step="0.05" />
+                                        <ValidationMessage For="() => SettingForm.OffscreenKillRewardsElite" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsCaptain" Hint="Target morale reward per group captain defeated off-screen, in native morale points." Label="Captain" min="0" max="898" step="1" />
+                                        <ValidationMessage For="() => SettingForm.OffscreenKillRewardsCaptain" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsSubordinateOfficer" Hint="Target morale reward per subordinate officer defeated off-screen; corps commanders are excluded." Label="Subordinate officer" min="0" max="898" step="1" />
+                                        <ValidationMessage For="() => SettingForm.OffscreenKillRewardsSubordinateOfficer" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsWindowMoraleCap" Hint="Maximum additional mod morale per winning corps during one reward window; native rewards are preserved." Label="Window morale cap" min="0" max="898" step="1" />
+                                        <ValidationMessage For="() => SettingForm.OffscreenKillRewardsWindowMoraleCap" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.OffscreenKillRewardsWindowSeconds" Hint="Battle seconds before the per-corps off-screen reward budget resets." Label="Window seconds" min="0.25" max="120" step="0.25" />
+                                        <ValidationMessage For="() => SettingForm.OffscreenKillRewardsWindowSeconds" />
+                                    </div>
+                                </div>
+                                <RoarDivider />
+                                <h3 class="wa-heading-s">Reinforcement waves</h3>
+                                <RoarSwitch @bind-Value="SettingForm.ReinforcementsEnabled" Hint="Grant permanent morale when reserved reinforcements join an existing corps, crediting native morale gains first.">Reinforcement morale rewards</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.ReinforcementsEnabled" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.ReinforcementsMoralePerTenPercent" Hint="Target morale points per 10% increase in the corps&#39; ordinary soldiers." Label="Morale per 10%" min="0" max="898" step="1" />
+                                        <ValidationMessage For="() => SettingForm.ReinforcementsMoralePerTenPercent" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.ReinforcementsWaveMoraleCap" Hint="Maximum target morale gain from one reinforcement wave, before subtracting native gains." Label="Wave morale cap" min="0" max="898" step="1" />
+                                        <ValidationMessage For="() => SettingForm.ReinforcementsWaveMoraleCap" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.ReinforcementsWaveSeconds" Hint="Battle seconds without another arrival before nearby arrivals are treated as one completed wave." Label="Wave seconds" min="0.25" max="10" step="0.25" />
+                                        <ValidationMessage For="() => SettingForm.ReinforcementsWaveSeconds" />
+                                    </div>
+                                </div>
+                                <h3 class="wa-heading-s">Surprise forces</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.SurpriseForcesEnabled" Hint="Raise an activated surprise force&#39;s corps to maximum base morale, 899 points, on arrival.">Maximum morale on surprise-force arrival</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.SurpriseForcesEnabled" />
+                                    </div>
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
+                                    <RoarIcon Name="person-walking-arrow-right" />
+                                    Rescue objectives
+                                </div>
+                                <div class="wa-body-s">Help endangered allied corps to recover.</div>
+                            </div>
+                            <div class="wa-stack">
+                                <RoarSwitch @bind-Value="SettingForm.RescueEnabled" Hint="Create rescue objectives for endangered allied corps and grant morale for completed rescues.">Rescue objectives</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.RescueEnabled" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.RescueObjectiveSeconds" Hint="Battle seconds allowed to complete a rescue after an endangered officer is identified." Label="Objective seconds" min="30" max="300" step="1" />
+                                        <ValidationMessage For="() => SettingForm.RescueObjectiveSeconds" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.RescueActionRadiusMetres" Hint="Distance in metres used to count nearby enemy casualties around the endangered officer and nearest player." Label="Action radius metres" min="10" max="60" step="1" />
+                                        <ValidationMessage For="() => SettingForm.RescueActionRadiusMetres" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.RescueRecoverMoralePercent" Hint="Minimum effective corps morale percentage needed to complete the stabilization stage." Label="Recover morale percent" min="35" max="70" step="1" />
+                                        <ValidationMessage For="() => SettingForm.RescueRecoverMoralePercent" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.RescueRecoverHealthPercent" Hint="Minimum rescued-officer health percentage needed to complete the stabilization stage." Label="Recover health percent" min="40" max="90" step="1" />
+                                        <ValidationMessage For="() => SettingForm.RescueRecoverHealthPercent" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.RescueEnemyCasualties" Hint="Nearby enemy casualties required after support; defeating one nearby enemy group leader also meets this condition." Label="Enemy casualties" min="1" max="30" step="1" />
+                                        <ValidationMessage For="() => SettingForm.RescueEnemyCasualties" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.RescueStableSeconds" Hint="Required casualty-free battle seconds before stabilization, then how long stable morale and health must be sustained." Label="Stable seconds" min="2" max="20" step="1" />
+                                        <ValidationMessage For="() => SettingForm.RescueStableSeconds" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.RescueMoraleReward" Hint="Permanent morale points awarded to a rescued corps, once per corps per battle." Label="Morale reward" min="0" max="50" step="1" />
+                                        <ValidationMessage For="() => SettingForm.RescueMoraleReward" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.RescueBattleRewardCap" Hint="Maximum total morale points actually granted by rescue rewards across the battle." Label="Battle reward cap" min="0" max="200" step="1" />
+                                        <ValidationMessage For="() => SettingForm.RescueBattleRewardCap" />
+                                    </div>
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
+                                    <RoarIcon Name="display" />
+                                    Rescue objectives
+                                </div>
+                                <div class="wa-body-s">Corps displays, distress notifications, battle reports and diagnostics.</div>
+                            </div>
+                            <div class="wa-stack">
+                                <RoarSwitch @bind-Value="SettingForm.HUDEnabled" Hint="Show the mod&#39;s corps morale panels.">Corps morale panels</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.HUDEnabled" />
+                                <h3 class="wa-heading">Corps panels</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDUpdateMilliseconds" Hint="Milliseconds between mod update cycles; smaller values update the display and observations more frequently." Label="Update milliseconds" min="100" max="2000" step="1" />
+                                        <ValidationMessage For="() => SettingForm.HUDUpdateMilliseconds" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDPanelWidth" Hint="Width of each corps panel in canvas units, normally corresponding to pixels." Label="Panel width" min="220" max="900" step="1" />
+                                        <ValidationMessage For="() => SettingForm.HUDPanelWidth" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDPortraitSize" Hint="Size of subordinate group leader portraits in the lower panel row." Label="Portrait size" min="16" max="64" step="1" />
+                                        <ValidationMessage For="() => SettingForm.HUDPortraitSize" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDCommanderPortraitSize" Hint="Size of the corps commander&#39;s header portrait, independent of subordinate portraits." Label="Commander portrait size" min="16" max="64" step="1" />
+                                        <ValidationMessage For="() => SettingForm.HUDCommanderPortraitSize" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDTitleFontSize" Hint="Font size of the commander name in each corps panel." Label="Title font size" min="12" max="18" step="1" />
+                                        <ValidationMessage For="() => SettingForm.HUDTitleFontSize" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDLeft" Hint="Horizontal offset of the corps panels from the left edge of the game canvas." Label="Left" min="0" max="3840" step="1" />
+                                        <ValidationMessage For="() => SettingForm.HUDLeft" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDTop" Hint="Vertical offset of the corps panels from the top edge of the game canvas." Label="Top" min="0" max="2160" step="1" />
+                                        <ValidationMessage For="() => SettingForm.HUDTop" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputText @bind-Value="SettingForm.HUDAllCorpsKey" Hint="UE4SS key name used to toggle the expanded corps list, for example F7." Label="All corps key" />
+                                        <ValidationMessage For="() => SettingForm.HUDAllCorpsKey" />
+                                    </div>
+                                </div>
+                                <RoarDivider />
+                                <h3 class="wa-heading">Morale bar colors</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDAllyMoraleRed" Hint="Red component of the allied permanent-morale bar color, from 0 to 1." Label="Ally morale red" min="0" max="1" step="0.01" />
+                                        <ValidationMessage For="() => SettingForm.HUDAllyMoraleRed" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDAllyMoraleGreen" Hint="Green component of the allied permanent-morale bar color, from 0 to 1." Label="Ally morale green" min="0" max="1" step="0.01" />
+                                        <ValidationMessage For="() => SettingForm.HUDAllyMoraleGreen" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDAllyMoraleBlue" Hint="Blue component of the allied permanent-morale bar color, from 0 to 1." Label="Ally morale blue" min="0" max="1" step="0.01" />
+                                        <ValidationMessage For="() => SettingForm.HUDAllyMoraleBlue" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDTemporaryRed" Hint="Red component of the temporary-morale bar color, from 0 to 1." Label="Temporary red" min="0" max="1" step="0.01" />
+                                        <ValidationMessage For="() => SettingForm.HUDTemporaryRed" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDTemporaryGreen" Hint="Green component of the temporary-morale bar color, from 0 to 1." Label="Temporary green" min="0" max="1" step="0.01" />
+                                        <ValidationMessage For="() => SettingForm.HUDTemporaryGreen" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.HUDTemporaryBlue" Hint="Blue component of the temporary-morale bar color, from 0 to 1." Label="Temporary blue" min="0" max="1" step="0.01" />
+                                        <ValidationMessage For="() => SettingForm.HUDTemporaryBlue" />
+                                    </div>
+                                </div>
+                                <RoarDivider />
+                                <h3 class="wa-heading">Morale details and trends</h3>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.BattlefieldMoraleDetails" Hint="Show recent morale causes, temporary support time and regroup phases beneath the morale bar.">Morale detail rows</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.BattlefieldMoraleDetails" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.BattlefieldTrendSeconds" Hint="Battle-second history window used to calculate morale trends and recent distress losses." Label="Trend seconds" min="3" max="30" step="1" />
+                                        <ValidationMessage For="() => SettingForm.BattlefieldTrendSeconds" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.BattlefieldReasonSeconds" Hint="Battle seconds a recorded morale-change reason remains visible in the panel." Label="Reason seconds" min="2" max="15" step="1" />
+                                        <ValidationMessage For="() => SettingForm.BattlefieldReasonSeconds" />
+                                    </div>
+                                </div>
+                                <RoarDivider />
+                                <h3 class="wa-heading">Distress alerts</h3>
+                                <RoarSwitch @bind-Value="SettingForm.BattlefieldDistressSignals" Hint="Show distress alerts for wounded allied officers in corps with low, deteriorating morale.">Distress notifications</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.BattlefieldDistressSignals" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.BattlefieldDistressMoralePercent" Hint="Maximum corps morale percentage for an allied officer to qualify for distress detection." Label="Distress morale percent" min="5" max="60" step="1" />
+                                        <ValidationMessage For="() => SettingForm.BattlefieldDistressMoralePercent" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.BattlefieldDistressHealthPercent" Hint="Maximum named-officer health percentage for distress detection; low morale and recent losses are also required." Label="Distress health percent" min="5" max="80" step="1" />
+                                        <ValidationMessage For="() => SettingForm.BattlefieldDistressHealthPercent" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.BattlefieldDistressDropPercent" Hint="Minimum drop in morale percentage points during the trend window that can qualify a distressed corps." Label="Distress drop percent" min="0.5" max="20" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.BattlefieldDistressDropPercent" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.BattlefieldDistressCasualties" Hint="Minimum confirmed casualties during the trend window that can qualify a distressed corps instead of a morale drop." Label="Distress casualties" min="1" max="30" step="1" />
+                                        <ValidationMessage For="() => SettingForm.BattlefieldDistressCasualties" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.BattlefieldAlertSeconds" Hint="Battle seconds that distress and rescue-completion notifications remain visible." Label="Alert seconds" min="2" max="15" step="1" />
+                                        <ValidationMessage For="() => SettingForm.BattlefieldAlertSeconds" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.BattlefieldAlertCooldownSeconds" Hint="Minimum battle seconds between distress alerts across all corps." Label="Alert cooldown seconds" min="10" max="180" step="1" />
+                                        <ValidationMessage For="() => SettingForm.BattlefieldAlertCooldownSeconds" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.BattlefieldCorpsAlertCooldownSeconds" Hint="Minimum battle seconds between alerts for the same corps; also delays a rescue retry after failure." Label="Corps alert cooldown seconds" min="30" max="300" step="1" />
+                                        <ValidationMessage For="() => SettingForm.BattlefieldCorpsAlertCooldownSeconds" />
+                                    </div>
+                                </div>
+                                <RoarDivider />
+                                <h3 class="wa-heading">Battle reports</h3>
+                                <RoarSwitch @bind-Value="SettingForm.ReportEnabled" Hint="Enable the in-game contribution report overlay.">Battle report overlay</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.ReportEnabled" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputText @bind-Value="SettingForm.ReportKey" Hint="UE4SS key name used to toggle the contribution report, for example F8." Label="Report toggle key" />
+                                        <ValidationMessage For="() => SettingForm.ReportKey" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.ReportShowOnResults" Hint="Automatically open the contribution report on the results screen when the report overlay is enabled.">Show on results</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.ReportShowOnResults" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.ReportSaveToFile" Hint="Write the final battle report to MoraleMatters-last-battle.txt beside the ASI.">Save to file</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.ReportSaveToFile" />
+                                    </div>
+                                </div>
+                                <RoarDivider />
+                                <h3 class="wa-heading">Diagnostics</h3>
+                                <RoarSwitch @bind-Value="SettingForm.GeneralProfile" Hint="Write update timing diagnostics to UE4SS.log to help investigate performance.">Performance diagnostics</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.GeneralProfile" />
+                            </div>
+                        </RoarDetails>
+                    </div>
+                    <RoarDivider />
+                    <div class="wa-cluster wa-justify-content-space-between">
+                        <div>
+                            @if (SettingEditContext.IsModified())
+                            {
+                                <RoarBadge Variant="BadgeVariant.Warning">Unsaved changes</RoarBadge>
+                            }
+                            else
+                            {
+                                <RoarBadge Variant="BadgeVariant.Neutral">No changes</RoarBadge>
+                            }
+                        </div>
+                        <div>
+                            <RoarButton @onclick="ResetSettingForm">Restore defaults</RoarButton>
+                            <RoarButton Variant="ButtonVariant.Brand" @onclick="SaveSettingAsync">Save settings</RoarButton>
+                        </div>
+                    </div>
+                </EditForm>
+            }
+        </RoarCard>
+        <div class="wa-stack" style="min-height: 0; overflow-y: auto;">
+            <RoarCard Orientation="CardOrientation.Vertical" Appreance="CardAppreance.FilledOutlined">
+                <div class="wa-flank">
+                    <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="download" />
+                    <div class="wa-split">
+                        <div class="wa-heading-xl">Mod Installation</div>
+
+                        @if (string.IsNullOrEmpty(LocalModVersion))
+                        {
+                            <RoarBadge Variant="BadgeVariant.Neutral">Not installed</RoarBadge>
+                        }
+
+                        @if (!string.IsNullOrEmpty(LocalModVersion))
+                        {
+                            <RoarBadge Variant="BadgeVariant.Brand">Installed: @LocalModVersion</RoarBadge>
+                        }
+
+                    </div>
+                </div>
+                <div class="wa-body">Select mod version</div>
+                <RoarSelect @bind-Value="SelectedModAssetVersion" Placeholder="Select mod version">
+                    @foreach (var asset in ModAssets)
+                    {
+                        <RoarOption Value="@asset.Version.ToString()">@asset.Version</RoarOption>
+                    }
+                </RoarSelect>
+
+                @if (SelectedModAsset is not null)
+                {
+                    <div class="wa-body">Changelog</div>
+                    <RoarCard Appreance="CardAppreance.FilledOutlined">
+                        @SelectedModAsset.NotesMarkdown
+                    </RoarCard>
+                }
+
+                <RoarDivider />
+
+                @if (LocalModVersion == SelectedModAssetVersion)
+                {
+                    <RoarButton class="full-width" Disabled Variant="ButtonVariant.Neutral">Installed</RoarButton>
+                }
+                else
+                {
+                    <RoarButton class="full-width" Variant="ButtonVariant.Brand" @onclick="DownloadAndInstallMod" Loading="@InstallLoading">Install</RoarButton>
+                }
+            </RoarCard>
+
+            <RoarCard Orientation="CardOrientation.Vertical" Appreance="CardAppreance.FilledOutlined">
+                <div class="wa-stack">
+                    <div class="wa-flank">
+                        <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Warning].Color" Name="circle-info" />
+                        <div class="wa-body-m">Keep the game closed during installion.</div>
+                    </div>
+                    <div class="wa-flank">
+                        <img src="morale_matters_icon.png" alt="MoraleMatters" width="32" height="32" />
+                        <div class="wa-body-m">UI version: @(AppInfo.Current.Version.Major).@(AppInfo.Current.Version.Minor)</div>
+                    </div>
+                </div>
+            </RoarCard>
+        </div>
+    </div>
+</main>
+
+<RoarToast @ref="Toast" />
+
+@code {
+    public GameFolderForm GameFolderForm { get; set; } = new();
+    public EditContext GameFolderEditContext { get; set; } = default!;
+    public string LocalModVersion { get; set; } = "";
+    public IDisposable? GameFolderFormValidator { get; set; }
+    public List<VelopackAsset> ModAssets { get; set; } = [];
+    public string? SelectedModAssetVersion { get; set; }
+    public VelopackAsset? SelectedModAsset => ModAssets.FirstOrDefault(x => x.Version.ToString() == SelectedModAssetVersion);
+    public bool InstallLoading { get; set; } = false;
+    public ModSettingForm SettingForm { get; set; } = new();
+    public EditContext SettingEditContext { get; set; } = default!;
+    public IDisposable? SettingFormValidator { get; set; }
+    public RoarToast Toast { get; set; } = default!;
+
+    private void ValidateBehaviorRegroup() => SettingEditContext.Validate();
+
+    protected override async Task OnInitializedAsync()
+    {
+        AppUpdateService.UpdateReady += OnUpdateReady;
+        GameFolderForm.GamePath = Preferences.Default.Get(nameof(GameFolderForm.GamePath), "");
+        GameFolderEditContext = new(GameFolderForm);
+        GameFolderFormValidator = GameFolderEditContext.EnableDataAnnotationsValidation(ServiceProvider);
+        SettingEditContext = new(SettingForm);
+        SettingFormValidator = SettingEditContext.EnableDataAnnotationsValidation(ServiceProvider);
+        await UpdateModInstallationAsync();
+    }
+
+    private void OnUpdateReady() => _ = InvokeAsync(StateHasChanged);
+
+    public async Task BrowseGameFolderAsync()
+    {
+        var result = await MainThread.InvokeOnMainThreadAsync(() => NativeFolderPicker.PickAsync());
+
+        if (result.IsSuccessful)
+        {
+            GameFolderForm.GamePath = result.Folder.Path;
+            Preferences.Default.Set(nameof(GameFolderForm.GamePath), GameFolderForm.GamePath);
+            await UpdateModInstallationAsync();
+        }
+    }
+
+    private async Task UpdateModInstallationAsync()
+    {
+        if (Application.Current is App app)
+        {
+            if (!GameFolderEditContext.Validate())
+            {
+                app.TitleBar.Subtitle = "Game not found.";
+            }
+            else
+            {
+                LocalModVersion = await ModService.GetLocalModVersionAsync(GameFolderForm.GamePath);
+                ModAssets = await ModService.GetModReleasesAsync();
+
+                if (ModAssets.Count > 0 && string.IsNullOrEmpty(SelectedModAssetVersion))
+                {
+                    SelectedModAssetVersion = ModAssets.First().Version.ToString();
+                }
+
+                if (string.IsNullOrEmpty(LocalModVersion))
+                {
+                    app.TitleBar.Subtitle = "Mod not installed";
+                    ResetSettingForm();
+                }
+                else
+                {
+                    app.TitleBar.Subtitle = $"Mod version: {LocalModVersion}";
+                    SettingForm.LoadModSettings(GameFolderForm.GamePath);
+                }
+            }
+        }
+    }
+
+    public async Task DownloadAndInstallMod()
+    {
+        InstallLoading = true;
+        await ModService.InstallModAsync(GameFolderForm.GamePath, SelectedModAsset);
+        await UpdateModInstallationAsync();
+        InstallLoading = false;
+    }
+
+    public void ResetSettingForm()
+    {
+        SettingFormValidator?.Dispose();
+        SettingForm = new();
+        SettingEditContext = new(SettingForm);
+        SettingFormValidator = SettingEditContext.EnableDataAnnotationsValidation(ServiceProvider);
+    }
+
+    public void Dispose()
+    {
+        AppUpdateService.UpdateReady -= OnUpdateReady;
+        GameFolderFormValidator?.Dispose();
+        SettingFormValidator?.Dispose();
+    }
+
+    public async Task SaveSettingAsync()
+    {
+        if (SettingEditContext.Validate())
+        {
+            await ModService.SaveModSettingsAsync(GameFolderForm.GamePath, SettingForm);
+            await Toast.CreateAsync("Save successfully. Take effect after restarting the game.", new()
+            {
+                Variant = ToastVariant.Success,
+            });
+            SettingEditContext.MarkAsUnmodified();
+        }
+        else
+        {
+            await Toast.CreateAsync("Settings contain invalid values", new()
+            {
+                Variant = ToastVariant.Danger,
+            });
+        }
+    }
+}

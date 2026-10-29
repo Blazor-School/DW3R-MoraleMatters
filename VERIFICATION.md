@@ -230,3 +230,14 @@ This section supersedes the 1.7.0 drop split and separation grace described abov
 - Release: `MoraleMatters-v1.7.1.zip`. Backups of the pre-correction source and installed ASI/INI are under `build/BeforeProximityAndDropCorrection-20261025-150427`. Deployment updates the Drops settings and removes the obsolete separation timer while preserving all other installed settings, including the 300-pixel panel width and 30-pixel subordinate portraits.
 
 No new live battlefield/visual verification was performed for 1.7.1. Leader presence changes are observed on the next sample, so removal can take up to approximately one battle second. The 80/20 roll uses the native 15-bit RNG and therefore has the usual finite-resolution rounding (26214 of 32768 values select meat buns at the 80 setting).
+
+
+## 1.7.2 expanded AI profile shift limits (2026-10-29)
+
+- The native INI loader accepts `[Behavior] LowMoraleProfileShift` from -19 to 0 and `HighMoraleProfileShift` from 0 to 19. Values outside these ranges remain clamped by the loader.
+- The shipped INI retains LowMoraleProfileShift=-6 and HighMoraleProfileShift=6. The final selected profile remains clamped within its original ordinary or bodyguard family; the native AI profile table is unchanged.
+- MoraleMattersUI input limits and DataAnnotations validation accept the same expanded ranges and retain the -6/+6 defaults. Its ASI hash lookup identifies the new binary as 1.7.2.
+- The release build uses the existing warnings-as-errors native pipeline and runs the model, callback, actual-native damage/drop, Lua/HUD and unsupported-host checks. Build log: `build/release-1.7.2-native-build.log`.
+- Release files: `release/v1.7.2/MoraleMatters-v1.7.2.zip` and `release/v1.7.2/releases.mod.json`, using the same package layout and manifest schema as the previous releases. The manifest contains the archive's SHA-1, SHA-256, byte size and release notes.
+
+No new live battlefield or visual verification was performed for this release. This release expands configuration limits without changing the shipped gameplay settings.
