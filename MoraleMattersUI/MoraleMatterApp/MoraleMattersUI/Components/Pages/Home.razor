@@ -1,11 +1,21 @@
 ﻿@page "/"
 @inject ThemeService ThemeService
 @inject ModService ModService
+@inject AppUpdateService AppUpdateService
 @inject IFolderPicker NativeFolderPicker
 @inject IServiceProvider ServiceProvider
 @implements IDisposable
 
 <main class="wa-stack content-padding settings-page">
+    @if (AppUpdateService.ReadyUpdate is VelopackAsset update)
+    {
+        <RoarCard Appreance="CardAppreance.FilledOutlined" style="flex-shrink: 0;">
+            <div class="wa-cluster">
+                <span>MoraleMatters UI @update.Version is ready to install.</span>
+                <RoarButton Variant="ButtonVariant.Brand" Disabled="@InstallLoading" @onclick="AppUpdateService.RestartToUpdate">Restart to update</RoarButton>
+            </div>
+        </RoarCard>
+    }
     <EditForm EditContext="GameFolderEditContext" style="flex-shrink: 0;">
         <RoarCard Appreance="CardAppreance.FilledOutlined">
             <DataAnnotationsValidator />
@@ -903,6 +913,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        AppUpdateService.UpdateReady += OnUpdateReady;
         GameFolderForm.GamePath = Preferences.Default.Get(nameof(GameFolderForm.GamePath), "");
         GameFolderEditContext = new(GameFolderForm);
         GameFolderFormValidator = GameFolderEditContext.EnableDataAnnotationsValidation(ServiceProvider);
@@ -910,6 +921,8 @@
         SettingFormValidator = SettingEditContext.EnableDataAnnotationsValidation(ServiceProvider);
         await UpdateModInstallationAsync();
     }
+
+    private void OnUpdateReady() => _ = InvokeAsync(StateHasChanged);
 
     public async Task BrowseGameFolderAsync()
     {
@@ -973,6 +986,7 @@
 
     public void Dispose()
     {
+        AppUpdateService.UpdateReady -= OnUpdateReady;
         GameFolderFormValidator?.Dispose();
         SettingFormValidator?.Dispose();
     }

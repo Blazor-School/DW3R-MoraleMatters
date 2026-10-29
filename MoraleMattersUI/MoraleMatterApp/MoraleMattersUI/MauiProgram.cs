@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Maui.LifecycleEvents;
 using MoraleMattersUI.Services;
 using RoarUI;
-using Velopack;
 
 namespace MoraleMattersUI;
 
@@ -29,6 +28,10 @@ public static class MauiProgram
                     {
                         presenter.Maximize();
                     }
+
+#if !DEBUG
+                    _ = IPlatformApplication.Current!.Services.GetRequiredService<AppUpdateService>().CheckAndDownloadAsync();
+#endif
                 }));
             });
 #endif
@@ -38,11 +41,6 @@ public static class MauiProgram
         builder.Services.GoRoar();
         builder.Services.AddRoarServices();
         builder.Services.AddSingleton(FolderPicker.Default);
-
-        VelopackApp
-            .Build()
-            .SetLogger(new VelopackLogger(builder.Services.BuildServiceProvider().GetRequiredService<ILogger<VelopackLogger>>()))
-            .Run();
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
