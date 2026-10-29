@@ -1,4 +1,4 @@
-# Morale Matters 1.7.1
+# Morale Matters 1.7.2
 
 A native ASI and UE4SS mod for DYNASTY WARRIORS 3 Complete Edition Remastered.
 
@@ -106,7 +106,7 @@ All settings are in `[Behavior]` in the INI. Both sides receive the same rules. 
 | Recovery | After 10 battle seconds with no corps group in native combat mode, base morale recovers toward 400 at 1 point per second before confidence and leadership scaling. Low morale recovers more slowly. | MoraleRecovery, RecoveryDelaySeconds, RecoveryPerSecond, RecoveryCeiling |
 | Commander leadership | Eligible groups within 20 metres of their living commander receive half panic loss/shock and more stable formation spacing. Recovery scales from 0.5x when no groups are nearby to 2x when all eligible groups are nearby. | CommanderLeadership, CommanderRadiusMetres, CommanderRecoveryMultiplier, CommanderPanicMultiplier |
 
-Behavior curves interpolate at native morale 100/200/400/600/800. Regroup thresholds alone use the HUD percentage scale (899 is 100%). Profile shifts are rounded and clamped within the unit's native profile family. They influence several native decisions together, rather than setting a universal block or dodge percentage. Units without an evasive ability do not acquire one.
+Behavior curves interpolate at native morale 100/200/400/600/800. Regroup thresholds alone use the HUD percentage scale (899 is 100%). LowMoraleProfileShift accepts -19 to 0 and HighMoraleProfileShift accepts 0 to 19; the shipped settings remain -6/+6. Profile shifts are rounded and clamped within the unit's native profile family. They influence several native decisions together, rather than setting a universal block or dodge percentage. Units without an evasive ability do not acquire one.
 
 Formation reshaping and local regrouping exclude fixed positions, player groups, commander attributes, explicit scenario targets, script-protected groups, and retreat/evacuation modes. Local regrouping additionally excludes named-officer groups. It temporarily changes only the individual controller's decision context and restores the group's strategic mode immediately; it does not issue a retreat or evacuation order. Five-second defeat shock can trigger regrouping below the 45% recovery threshold, subject to the same cooldown. High morale resists this shock; commander proximity halves it.
 
@@ -161,6 +161,6 @@ Requires Zig 0.15.2 and Python with `lupa` on Windows. The Lua regression runner
 .\MoraleMatters\build.ps1 -ZigPath 'C:\path\to\zig.exe'
 ```
 
-Add `-Install` to copy the built mod into this game installation while the game is closed; this replaces the installed INI with package defaults. The build runs the model and native callback assertions (including the per-hit combat suite) and unsupported-host guard check, then writes `MoraleMatters-v1.7.1.zip`. Source is in `src/` and `Scripts/`; the MinHook dependency and its license are in `vendor/minhook/`.
+Add `-Install` to copy the built mod into this game installation while the game is closed; this replaces the installed INI with package defaults. The build runs the model and native callback assertions (including the per-hit combat suite) and unsupported-host guard check, then writes `MoraleMatters-v1.7.2.zip`. Source is in `src/` and `Scripts/`; the MinHook dependency and its license are in `vendor/minhook/`.
 
 See `VERIFICATION.md` for the distinction between automated checks and in-game validation.

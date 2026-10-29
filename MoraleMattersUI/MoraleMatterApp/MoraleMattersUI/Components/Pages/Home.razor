@@ -240,11 +240,11 @@
                                         <ValidationMessage For="() => SettingForm.BehaviorAIProfiles" />
                                     </div>
                                     <div class="wa-stack wa-gap-xs">
-                                        <RoarInputNumber @bind-Value="SettingForm.BehaviorLowMoraleProfileShift" Hint="Native AI profile shift at 100 morale; profiles are unchanged at 400 morale." Label="Low Morale Profile Shift" min="-6" max="0" step="1" />
+                                        <RoarInputNumber @bind-Value="SettingForm.BehaviorLowMoraleProfileShift" Hint="Native AI profile shift at 100 morale; profiles are unchanged at 400 morale." Label="Low Morale Profile Shift" min="-19" max="0" step="1" />
                                         <ValidationMessage For="() => SettingForm.BehaviorLowMoraleProfileShift" />
                                     </div>
                                     <div class="wa-stack wa-gap-xs">
-                                        <RoarInputNumber @bind-Value="SettingForm.BehaviorHighMoraleProfileShift" Hint="Native AI profile shift at 800 morale; intermediate morale values interpolate." Label="High Morale Profile Shift" min="0" max="6" step="1" />
+                                        <RoarInputNumber @bind-Value="SettingForm.BehaviorHighMoraleProfileShift" Hint="Native AI profile shift at 800 morale; intermediate morale values interpolate." Label="High Morale Profile Shift" min="0" max="19" step="1" />
                                         <ValidationMessage For="() => SettingForm.BehaviorHighMoraleProfileShift" />
                                     </div>
                                 </div>

@@ -75,10 +75,10 @@ public class ModSettingForm : IValidatableObject
 
     public bool BehaviorAIProfiles { get; set; } = true;
 
-    [Range(-6.0, 0.0)]
+    [Range(-19.0, 0.0)]
     public double BehaviorLowMoraleProfileShift { get; set; } = -6;
 
-    [Range(0.0, 6.0)]
+    [Range(0.0, 19.0)]
     public double BehaviorHighMoraleProfileShift { get; set; } = 6;
 
     public bool BehaviorFormationCohesion { get; set; } = true;
