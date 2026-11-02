@@ -46,6 +46,10 @@ namespace
         Config.reinforcements = Boolean(L"Reinforcements", L"Enabled", true);
         Config.surpriseForces = Boolean(L"SurpriseForces", L"Enabled", true);
         Config.enemyProximity = Boolean(L"EnemyProximity", L"Enabled", true);
+        Config.weaponFusion = Boolean(L"WeaponFusion", L"Enabled", true);
+        Config.weaponFusionIncrement = static_cast<int>(Number(L"WeaponFusion", L"Increment", 2, 1, 1000));
+        Config.archerRandomTargets = Boolean(L"Archers", L"RandomEnemyTargeting", true);
+        Config.archerDamageTaken = Number(L"Archers", L"DamageTakenMultiplier", 1.5f, 0, 10);
         Config.meatBuns = Boolean(L"Drops", L"Enabled", Boolean(L"Drops", L"DoubleMeatBunChance", true));
         Config.dropComboHits = static_cast<int>(Number(L"Drops", L"ComboHits", 12, 1, 999));
         Config.meatBunPercent = static_cast<int>(Number(L"Drops", L"MeatBunPercent", 80, 0, 100));
@@ -145,12 +149,14 @@ namespace
         swprintf(logPath, 32768, L"%ls\\MoraleMatters.log", path);
         LogFile = CreateFileW(logPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         ReadSettings();
-        Log("Morale Matters 1.7.3. Officer share=%.2f rally=%.0f/%.0fs healing=%.0f%% cooldown=%.0fs.", Config.officerDamageShare, Config.rallyBonus, Config.rallyDuration, Config.healFraction * 100, Config.healCooldown);
+        Log("Morale Matters 1.8.0. Officer share=%.2f rally=%.0f/%.0fs healing=%.0f%% cooldown=%.0fs.", Config.officerDamageShare, Config.rallyBonus, Config.rallyDuration, Config.healFraction * 100, Config.healCooldown);
         Log("Battlefield: phasedRegroup=%d withdrawal=%.0fm reformScale=%.2f rescue=%d reward=%.0f battleCap=%.0f.", Behavior.withdrawal, Behavior.withdrawalDistance / 100, Behavior.withdrawalScale, Experience.rescue, Experience.rescueReward, Experience.rescueBattleCap);
         Log("Supplies/cohesion: drops=%d comboHits=%d meatBunPercent=%d enemyProximity=%d radius=%.0fm bonus=%.0f (mutual living leaders; no separation grace).", Config.meatBuns, Config.dropComboHits, Config.meatBunPercent, Config.enemyProximity, Config.enemyProximityRadius / 100, Config.enemyProximityBonus);
         Log("Off-screen kill rewards: enabled=%d soldier=%.2f elite=%.2f captain=%.2f officer=%.2f cap=%.2f window=%.2fs (native gains credited).", KillRewards.enabled, KillRewards.soldier, KillRewards.elite, KillRewards.captain, KillRewards.officer, KillRewards.cap, KillRewards.seconds);
         Log("Reinforcements: enabled=%d gain=%.2f per 10%% cap=%.2f wave=%.2fs (native morale gains credited).", Config.reinforcements, Config.reinforcementGain, Config.reinforcementCap, Config.reinforcementWaveSeconds);
         Log("Surprise forces: enabled=%d maximum base morale=%.0f on confirmed arrival.", Config.surpriseForces, MoraleMaximum);
+        Log("Archers: randomEnemyTargeting=%d damageTaken=%.2fx (ordinary bow troops, both sides).", Config.archerRandomTargets, Config.archerDamageTaken);
+        Log("Weapon fusion: enabled=%d matching lower/equal increment=%d.", Config.weaponFusion, Config.weaponFusionIncrement);
         Log("Behavior: enabled=%d profiles=%d cohesion=%d regroup=%d panic=%d recovery=%d leadership=%d.", Behavior.enabled, Behavior.profiles, Behavior.cohesion, Behavior.regroup, Behavior.panic, Behavior.recovery, Behavior.leadership);
         Log("On-screen combat: enabled=%d namedOfficerStrength=%.2f; per-hit motion scaling, native guards/floors retained.", Config.attributes, Config.namedOfficerScale);
         for (int index = 0; index < 5; ++index)

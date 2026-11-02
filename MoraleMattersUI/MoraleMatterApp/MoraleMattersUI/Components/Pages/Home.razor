@@ -454,6 +454,37 @@
                         <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
+                                    <RoarIcon Name="recycle" />
+                                    Weapon fusion
+                                </div>
+                                <div class="wa-body-s">Improved fusion for officer and bodyguard weapons. Press F6 in the game's base-weapon selection screen to switch inventories.</div>
+                            </div>
+                            <div class="wa-stack wa-gap-xs">
+                                <RoarSwitch @bind-Value="SettingForm.WeaponFusionEnabled">Enable improved weapon fusion mechanics.</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.WeaponFusionEnabled" />
+                                <RoarInputNumber @bind-Value="SettingForm.WeaponFusionIncrement" Label="Matching tile increase" Hint="When a matching source tile has a lower or equal value, increase the destination tile by this amount. Applies to officer and bodyguard weapons." min="1" max="1000" step="1" />
+                                <ValidationMessage For="() => SettingForm.WeaponFusionIncrement" />
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
+                                    <RoarIcon Name="bullseye" />
+                                    Archery
+                                </div>
+                                <div class="wa-body-s">Adjust the behavior of archer units.</div>
+                            </div>
+                            <div class="wa-stack wa-gap-xs">
+                                <div class="wa-heading-m">Archers</div>
+                                <RoarSwitch @bind-Value="SettingForm.ArchersRandomEnemyTargeting" Hint="Turn off means archers will always target the player.">Random enemy targeting</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.ArchersRandomEnemyTargeting" />
+                                <RoarInputNumber @bind-Value="SettingForm.ArchersDamageTakenMultiplier" Label="Archer damage taken" Hint="Archer damage taken multiplier" min="0" max="10" step="0.1" />
+                                <ValidationMessage For="() => SettingForm.ArchersDamageTakenMultiplier" />
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
                                     <RoarIcon Name="burger" />
                                     Item drops
                                 </div>
@@ -665,7 +696,7 @@
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
                                     <RoarIcon Name="display" />
-                                    Rescue objectives
+                                    Display
                                 </div>
                                 <div class="wa-body-s">Corps displays, distress notifications, battle reports and diagnostics.</div>
                             </div>

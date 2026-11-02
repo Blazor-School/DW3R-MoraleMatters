@@ -29,6 +29,7 @@ local function log(message) print("[MoraleMatters] " .. message .. "\n") end
 local bridge, bridgeError = package.loadlib(binDir .. "\\MoraleMatters.asi", "MoraleMatters_Query")
 if not bridge then log("Native core could not load: " .. tostring(bridgeError)); return end
 if number("general.enabled", 1, 0, 1) == 0 then log("Disabled in INI."); return end
+if number("weaponfusion.enabled", 1, 0, 1) == 1 then dofile(modDir .. "\\Scripts\\WeaponFusion.lua")(bridge) end
 local Experience = dofile(modDir .. "\\Scripts\\Experience.lua")
 local experienceConfig = {
     distress=number("battlefield.distresssignals",1,0,1)==1,

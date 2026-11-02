@@ -79,6 +79,14 @@ if (Test-Path -LiteralPath $nativeExecutable) {
     Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-static', '-o', $nativeDropTests, (Join-Path $projectRoot 'tests\NativeDropIntegration.cpp')) + $hookObjects)
     & $nativeDropTests $nativeExecutable
     if ($LASTEXITCODE -ne 0) { throw 'Native executable drop selection tests failed' }
+    $weaponFusionTests = Join-Path $buildRoot 'WeaponFusionIntegration.exe'
+    Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-static', '-o', $weaponFusionTests, (Join-Path $projectRoot 'tests\WeaponFusionIntegration.cpp')) + $hookObjects)
+    & $weaponFusionTests $nativeExecutable
+    if ($LASTEXITCODE -ne 0) { throw 'Native weapon fusion integration tests failed' }
+    $archerTests = Join-Path $buildRoot 'ArcherIntegration.exe'
+    Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-static', '-o', $archerTests, (Join-Path $projectRoot 'tests\ArcherIntegration.cpp')) + $hookObjects)
+    & $archerTests $nativeExecutable
+    if ($LASTEXITCODE -ne 0) { throw 'Native archer targeting and damage integration tests failed' }
 
 }
 & $PythonPath (Join-Path $projectRoot 'tests\LuaExperienceTests.py')
@@ -94,7 +102,7 @@ foreach ($document in @('README.md', 'VERIFICATION.md', 'LICENSE.txt')) {
     if (Test-Path -LiteralPath (Join-Path $projectRoot $document)) { Copy-Item -LiteralPath (Join-Path $projectRoot $document) -Destination $packageRoot -Force }
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'vendor\minhook\LICENSE.txt') -Destination (Join-Path $packageRoot 'MinHook-LICENSE.txt') -Force
-$archive = Join-Path $projectRoot 'MoraleMatters-v1.7.3.zip'
+$archive = Join-Path $projectRoot 'MoraleMatters-v1.8.0.zip'
 Compress-Archive -Path (Join-Path $packageRoot '*') -DestinationPath $archive -Force
 if ($Install) {
     if (Get-Process -Name 'DW3CE_RE-Win64-Shipping' -ErrorAction SilentlyContinue) { throw 'Close the game before installing.' }

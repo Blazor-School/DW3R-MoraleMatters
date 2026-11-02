@@ -388,3 +388,66 @@ updated[0].members[1].health=-0.2;api.render(panel,updated[0],36,170)
 assert(panel.icons[1].healthSlot.size.X==0 and panel.members==signature)
 ''')
 print('Passed five full-HUD layout cases: individual officers/all Vice General variants, one unnamed count, casualties/filtering, widget reuse, live HP, 16-64px configured portraits, narrow panels, ellipsis, dynamic height and trend caching.')
+
+# Native-menu entry point: execute the real F6 binding and hint updater with
+# reflected widget/native status fixtures, including hidden and disabled menus.
+fusion_lua = LuaRuntime(unpack_returned_tuples=True)
+fusion_lua.execute(r'''
+Key={F6='F6'}
+local checks=0
+function check(value) checks=checks+1;assert(value,'fusion menu assertion '..checks) end
+function FText(value) return value end
+function RegisterKeyBind(_,callback) pressF6=callback end
+function LoopAsync(_,callback) tick=callback end
+function ExecuteInGameThread(callback) callback() end
+local function widget()
+ local w={valid=true,visible=true}
+ function w:IsValid() return self.valid end
+ function w:IsVisible() return self.visible end
+ function w:IsInViewport() return self.inViewport~=false end
+ function w:GetAddress() return 123 end
+ function w:SetVisibility(value) self.visibility=value end
+ function w:SetText(value) self.text=value end
+ return w
+end
+label,grid,portrait,selector,manager=widget(),widget(),widget(),widget(),widget()
+selector.BP_parts_abandonment_chara_list=widget()
+selector.BP_parts_abandonment_chara_list.text_equipable=label
+selector.BP_parts_abandonment_chara_list.chara_List=grid
+selector.chara_full_xxx=portrait
+manager.WeaponCustomSelectWidget=selector
+function FindFirstOf(name) check(name=='BriefingEquipManager');return manager end
+status,mode,queries,toggles=1,1,0,0
+function bridge(op,address,toggle)
+ if op==0 then return status end
+ check(op==14 and address==123)
+ queries=queries+1
+ if toggle==1 then
+  toggles=toggles+1
+  if mode==1 then mode=2 elseif mode==2 then mode=1 end
+ end
+ return mode
+end
+function countChecks() return checks end
+''')
+fusion_lua.execute((root / 'Scripts' / 'WeaponFusion.lua').read_text(encoding='utf-8'))(fusion_lua.globals().bridge)
+fusion_lua.execute(r'''
+tick();check(label.text=='Officer weapons | F6: Bodyguards' and grid.visibility==0)
+pressF6();check(mode==2 and grid.visibility==1 and portrait.visibility==1)
+check(label.text=='Bodyguard weapons | F6: Officers' and toggles==1)
+mode=4;pressF6();check(mode==4 and label.text=='Bodyguard weapons | Back, then F6: Officers')
+mode=2;pressF6();check(mode==1 and grid.visibility==0 and portrait.visibility==0)
+local before=queries
+selector.visible=false;pressF6();tick();check(queries==before)
+selector.visible=true;status=0;pressF6();tick();check(queries==before)
+status=1;selector.inViewport=false;pressF6();check(mode==2) -- Hosted pickers are not direct viewport widgets.
+selector.inViewport=true;mode=1
+local immediate=ExecuteInGameThread
+function ExecuteInGameThread(callback) queued=callback end
+tick();pressF6();check(mode==1)
+queued();check(mode==2) -- A queued polling update cannot swallow F6.
+ExecuteInGameThread=immediate
+before=queries;mode=0;pressF6();check(mode==0)
+manager.valid=false;manager=nil;pressF6();tick();check(queries==before+1)
+''')
+print(f'Passed {fusion_lua.globals().countChecks()} F6 fusion-menu, hint, inventory-mode, visibility and disabled-state assertions.')

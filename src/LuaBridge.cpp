@@ -225,5 +225,10 @@ extern "C" __declspec(dllexport) int MoraleMatters_Query(lua_State* lua)
         Number(lua, CompleteRescue(static_cast<int>(Integer(lua, 2))));
         return 1;
     }
+    if (operation == 14)
+    {
+        Number(lua, WeaponFusionMenu(reinterpret_cast<void*>(Integer(lua, 2)), Integer(lua, 3) != 0));
+        return 1;
+    }
     return 0;
 }

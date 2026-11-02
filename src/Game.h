@@ -19,6 +19,7 @@ namespace MoraleMatters
     void Log(const char* format, ...);
     bool Readable(const void* address, size_t bytes);
     bool InitializeGameHooks();
+    int WeaponFusionMenu(void* manager, bool toggle);
     void ResetBattle(void* manager);
     void* Manager();
     void* Group(int id);

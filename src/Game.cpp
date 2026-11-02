@@ -1,5 +1,6 @@
 #include "Game.h"
 #include "MinHook.h"
+#include <stddef.h>
 #include <string.h>
 
 namespace MoraleMatters
@@ -61,6 +62,7 @@ namespace MoraleMatters
     static SpecialAttributeFn OriginalSpecialAttribute = nullptr;
     static ScenarioEffectFn OriginalScenarioEffect = nullptr;
     static void ResetBehavior();
+    static void ResetArchers();
     static void ResetKillRewards();
     static void ResetExperience();
     static void ChangeMorale(void* object, float amount, int cause, MoraleFn original);
@@ -108,6 +110,7 @@ namespace MoraleMatters
         memset(Corps, 0, sizeof(Corps));
         memset(Encounters, 0, sizeof(Encounters));
         ResetBehavior();
+        ResetArchers();
         ResetKillRewards();
         ResetExperience();
         memset(Reinforcements, 0, sizeof(Reinforcements));
@@ -194,6 +197,8 @@ namespace MoraleMatters
 
     #include "Experience.inc"
     #include "Behavior.inc"
+    #include "Archers.inc"
+    #include "WeaponFusion.inc"
     #include "OnscreenCombat.inc"
     #include "Supplies.inc"
 
@@ -775,7 +780,31 @@ namespace MoraleMatters
         SetBehaviorStatus = reinterpret_cast<StatusFn>(Image + 0x13CFE30);
         BehaviorOwner = reinterpret_cast<OwnerFn>(Image + 0x1E291F0);
         BehaviorStopped = reinterpret_cast<BlackboardBoolFn>(Image + 0x13DD280);
+        ArcherTarget = reinterpret_cast<ArcherTargetFn>(Image + 0x13CE5E0);
+        ArcherInRange = reinterpret_cast<ArcherRangeFn>(Image + 0x13D6B80);
+        ArcherSetTarget = reinterpret_cast<ArcherSetFn>(Image + 0x13CE640);
+        ArcherRandomState ^= static_cast<uint32_t>(GetTickCount64());
+        if (!ArcherRandomState) ArcherRandomState = 1;
         HookSpec hooks[] = {
+            {0x16963C0, reinterpret_cast<void*>(&FusionInit), reinterpret_cast<void**>(&OriginalFusionInit)},
+            {0x1696920, reinterpret_cast<void*>(&FusionBase), reinterpret_cast<void**>(&OriginalFusionBase)},
+            {0x1697A10, reinterpret_cast<void*>(&FusionClick), reinterpret_cast<void**>(&OriginalFusionClick)},
+            {0x169A2D0, reinterpret_cast<void*>(&FusionUndo), reinterpret_cast<void**>(&OriginalFusionUndo)},
+            {0x1696EE0, reinterpret_cast<void*>(&FusionSource), reinterpret_cast<void**>(&OriginalFusionSource)},
+            {0x1697770, reinterpret_cast<void*>(&FusionProgressAll), reinterpret_cast<void**>(&OriginalFusionProgressAll)},
+            {0x1697360, reinterpret_cast<void*>(&FusionProgress), reinterpret_cast<void**>(&OriginalFusionProgress)},
+            {0x1536630, reinterpret_cast<void*>(&FusionIds), reinterpret_cast<void**>(&OriginalFusionIds)},
+            {0x1536880, reinterpret_cast<void*>(&FusionCompatible), reinterpret_cast<void**>(&OriginalFusionCompatible)},
+            {0x1463840, reinterpret_cast<void*>(&FusionMetadata), reinterpret_cast<void**>(&OriginalFusionMetadata)},
+            {0x14BEEB0, reinterpret_cast<void*>(&FusionRank), reinterpret_cast<void**>(&OriginalFusionRank)},
+            {0x16985E0, reinterpret_cast<void*>(&FusionSetup), reinterpret_cast<void**>(&OriginalFusionSetup)},
+            {0x16990F0, reinterpret_cast<void*>(&FusionConfirm), reinterpret_cast<void**>(&OriginalFusionConfirm)},
+            {0x1517360, reinterpret_cast<void*>(&FusionCommit), reinterpret_cast<void**>(&OriginalFusionCommit)},
+            {0x1699750, reinterpret_cast<void*>(&WeaponFusionSelect), reinterpret_cast<void**>(&OriginalWeaponFusionSelect)},
+            {0x13D43E0, reinterpret_cast<void*>(&ArcherPriority), reinterpret_cast<void**>(&OriginalArcherPriority)},
+            {0x13D6E60, reinterpret_cast<void*>(&ArcherResolve), reinterpret_cast<void**>(&OriginalArcherResolve)},
+            {0x13D77D0, reinterpret_cast<void*>(&ArcherAssign), reinterpret_cast<void**>(&OriginalArcherAssign)},
+            {0x13978F0, reinterpret_cast<void*>(&ArcherHit), reinterpret_cast<void**>(&OriginalArcherHit)},
             {0x13A1C80, reinterpret_cast<void*>(&CorpsTick), reinterpret_cast<void**>(&OriginalCorpsTick)},
             {0x13A5570, reinterpret_cast<void*>(&GroupTick), reinterpret_cast<void**>(&OriginalGroupTick)},
             {0x13AB0C0, reinterpret_cast<void*>(&Attack), reinterpret_cast<void**>(&OriginalAttack)},
@@ -810,7 +839,7 @@ namespace MoraleMatters
             MH_Uninitialize();
             return false;
         }
-        Log("ACTIVE: sixteen native hooks installed, including configurable combo drops, per-hit on-screen damage, corps, groups, morale, casualties, attack waits, arrivals, AI decisions, formation cohesion and off-screen kill rewards.");
+        Log("ACTIVE: thirty-five native hooks installed, including officer/bodyguard weapon fusion, random archer targeting, archer damage taken, configurable combo drops, per-hit on-screen damage, corps, groups, morale, casualties, attack waits, arrivals, AI decisions, formation cohesion and off-screen kill rewards.");
         return true;
     }
 }
