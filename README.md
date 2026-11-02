@@ -9,6 +9,8 @@ You can configure these features through **Morale Matters UI**, including their 
 ## Features
 
 - **Combat scaling:** Set damage dealt, damage taken and AI attack frequency at five morale levels. Effects change gradually between those levels and apply to both armies. Named-officer effect strength is adjustable; player characters do not receive their own morale multipliers.
+- **Weapon fusion (1.8.0):** Matching numeric tiles take the source value when it is higher; a lower or equal source increases the destination by `2` (configurable under **Weapon fusion**, or `[WeaponFusion] Increment=2`). Different types retain native replacement. In the game's **Weapon Fusion** screen, press **F6 while choosing the base weapon** to switch between officer and bodyguard weapons. Bodyguards use the same rules, their own inventory and skill names, and up to three slots. Equipped bodyguard weapons can be upgraded without unequipping them. Choose a donor from the same bodyguard weapon family; equipped weapons cannot be consumed as donors. Press Back to return to base selection before switching inventories. Elements and non-numeric rare officer skills retain native rules. Confirmation consumes the selected donor; undoing or revisiting a preview does not award extra increases. Disable `[WeaponFusion] Enabled` for vanilla officer fusion. Values saturate at the signed 32-bit storage limit.
+- **Archers (1.8.0):** Ordinary bow-archer troops on both sides can choose a random eligible enemy when acquiring a target, with no player priority. Valid targets are retained. Separately adjust their on-screen damage taken (`0` = no incoming hit damage, `1` = normal, `1.5` = 50% more, range `0`–`10`). Named officers and crossbowmen are excluded; scripted orders remain native. Both options work independently of morale combat scaling.
 - **Morale-driven behavior:** Morale affects aggression, guarding and evasion where a unit's abilities support them. Confident infantry hold tighter formations. Low-morale infantry can fall back, reform and rejoin while keeping their group's strategic orders.
 - **Casualty penalties and panic:** Soldiers, elite troops, captains and subordinate officers have separate morale-loss values. A subordinate leader's defeat can also cause panic among nearby surviving groups, with a cap on the additional morale loss.
 - **Commander leadership and recovery:** A nearby living commander reduces panic and helps stabilize formations. Corps can recover morale while out of combat, with faster recovery when their troops are close to the commander.
@@ -55,7 +57,7 @@ Expand a section in **Mod Settings** and adjust the options you want. Each secti
 
 | Section | What you can change |
 | --- | --- |
-| **Combat settings** | Damage dealt, damage taken and AI attack frequency at five morale levels; named-officer effect strength; morale penalties for casualties. |
+| **Combat settings** | Damage dealt, damage taken and AI attack frequency at five morale levels; named-officer effect strength; archer random targeting and damage taken; morale penalties for casualties. |
 | **Behavior settings** | AI decisions, formation spacing, infantry regrouping, panic after nearby defeats, passive recovery, commander leadership and support between nearby enemy corps. |
 | **Item drops** | Required combo hits and the chance of meat buns versus arrows. |
 | **Rally allies** | Approach distance, temporary morale, healing, cooldowns and support popup text. |
@@ -73,6 +75,7 @@ Edits are not saved automatically. Select **Save settings** when finished. Corre
 
 - **Morale points** use the game's 1–899 scale; fields marked **percent** use percentages. A bonus of 100 points is about 11 percentage points on the HUD.
 - **Damage dealt / Damage taken** are multipliers: `1` is normal, `2` doubles the coefficient and `0.5` halves it. Combat effects apply to both armies; player characters do not receive their own morale multipliers.
+- **Archer settings** default to random targeting and `1.5` damage taken. Turn random targeting off to restore native selection, or set archer damage taken to `1` to disable the extra damage. Set `DamageTakenMultiplier=0` in `MoraleMatters.ini` for no incoming on-screen hit damage. Values below `1` are INI-only; the UI retains its existing input limits.
 - **Attack frequency** changes native AI attack retry waits. Higher values shorten those waits; attack animations keep their normal speed.
 - Combat effects change gradually between the five rows. Keep morale points increasing from **Very low** to **Very high**.
 - Fraction fields use `0`–`1`: for example, a **Healing fraction** of `0.5` restores 50% of maximum health. Gameplay durations and cooldowns use battle time.

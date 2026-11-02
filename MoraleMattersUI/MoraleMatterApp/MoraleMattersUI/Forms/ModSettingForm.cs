@@ -61,6 +61,18 @@ public class ModSettingForm : IValidatableObject
     [Range(0.0, 100.0)]
     public int DropsMeatBunPercent { get; set; } = 60;
 
+    // [WeaponFusion]
+    public bool WeaponFusionEnabled { get; set; } = true;
+
+    [Range(1, 1000)]
+    public int WeaponFusionIncrement { get; set; } = 2;
+
+    // [Archers]
+    public bool ArchersRandomEnemyTargeting { get; set; } = true;
+
+    [Range(0, 10.0)]
+    public double ArchersDamageTakenMultiplier { get; set; } = 1.5;
+
     // [EnemyProximity]
     public bool EnemyProximityEnabled { get; set; } = true;
 
@@ -179,13 +191,13 @@ public class ModSettingForm : IValidatableObject
     public double CasualtiesSoldier { get; set; } = 1;
 
     [Range(0.0, 898.0)]
-    public double CasualtiesElite { get; set; } = 2;
+    public double CasualtiesElite { get; set; } = 5;
 
     [Range(0.0, 898.0)]
-    public double CasualtiesCaptain { get; set; } = 10;
+    public double CasualtiesCaptain { get; set; } = 15;
 
     [Range(0.0, 898.0)]
-    public double CasualtiesSubordinateOfficer { get; set; } = 50;
+    public double CasualtiesSubordinateOfficer { get; set; } = 60;
 
     // [Combat]
     public bool CombatEnabled { get; set; } = true;
@@ -236,7 +248,7 @@ public class ModSettingForm : IValidatableObject
     public double CombatHighDamageDealt { get; set; } = 1.60;
 
     [Range(0.05, 10.0)]
-    public double CombatHighDamageTaken { get; set; } = 0.75;
+    public double CombatHighDamageTaken { get; set; } = 0.8;
 
     [Range(0.1, 5.0)]
     public double CombatHighAttackFrequency { get; set; } = 1.75;
@@ -248,7 +260,7 @@ public class ModSettingForm : IValidatableObject
     public double CombatVeryHighDamageDealt { get; set; } = 2.50;
 
     [Range(0.05, 10.0)]
-    public double CombatVeryHighDamageTaken { get; set; } = 0.45;
+    public double CombatVeryHighDamageTaken { get; set; } = 0.6;
 
     [Range(0.1, 5.0)]
     public double CombatVeryHighAttackFrequency { get; set; } = 2.75;

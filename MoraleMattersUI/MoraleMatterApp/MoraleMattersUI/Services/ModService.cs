@@ -1,5 +1,5 @@
-﻿using Roar.DependencyInjection;
-using MoraleMattersUI.Forms;
+﻿using MoraleMattersUI.Forms;
+using Roar.DependencyInjection;
 using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -26,7 +26,8 @@ public class ModService(VelopackLogger VelopackLogger)
         ["1115DDD3E9883DD2B454618A8CDDAEED734AFE05F86FE089DC9A619C39D7F410"] = "1.7.0",
         ["4E1D5AB73A04C624070E567866767C8DD50B9DFA62C6884812B43D98B4F20F34"] = "1.7.1",
         ["4F8B43A40ECA3DB75474FDBF1E3F75BF163DEA7BC8FEB65710D9211066109253"] = "1.7.2",
-        ["61E89BFFF77A211A36DC7A4C753C2E4C713FBAC815C21A023C16B369A32C2FA7"] = "1.7.3"
+        ["61E89BFFF77A211A36DC7A4C753C2E4C713FBAC815C21A023C16B369A32C2FA7"] = "1.7.3",
+        ["58396C9A8C7BF2325C3C52B91217D7D1DDD79CB6FCD7911EB1A66EBF7BF3FC98"] = "1.8.0"
     };
 
     private const string _appId = "MoraleMatters";
@@ -84,7 +85,7 @@ public class ModService(VelopackLogger VelopackLogger)
 
     public async Task SaveModSettingsAsync(string gamePath, ModSettingForm settings)
     {
-        string[] sections = ["General", "OffscreenKillRewards", "Offscreen", "Reinforcements", "SurpriseForces", "Drops", "EnemyProximity", "Behavior", "Support", "Casualties", "Combat", "HUD", "Battlefield", "Rescue", "Report"];
+        string[] sections = ["General", "OffscreenKillRewards", "Offscreen", "Reinforcements", "SurpriseForces", "Drops", "WeaponFusion", "Archers", "EnemyProximity", "Behavior", "Support", "Casualties", "Combat", "HUD", "Battlefield", "Rescue", "Report"];
         var groups = typeof(ModSettingForm).GetProperties().GroupBy(property => sections.First(section => property.Name.StartsWith(section, StringComparison.Ordinal)));
         var content = new StringBuilder();
 

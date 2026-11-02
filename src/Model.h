@@ -46,6 +46,10 @@ namespace MoraleMatters
         bool surpriseForces = true;
         bool enemyProximity = true;
         bool meatBuns = true;
+        bool weaponFusion = true;
+        int weaponFusionIncrement = 2;
+        bool archerRandomTargets = true;
+        float archerDamageTaken = 1.5f;
         int dropComboHits = 12;
         int meatBunPercent = 80;
         float enemyProximityRadius = 3000.0f;
