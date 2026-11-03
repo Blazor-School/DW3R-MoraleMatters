@@ -9,7 +9,7 @@ You can configure these features through **Morale Matters UI**, including their 
 ## Features
 
 - **Combat scaling:** Set damage dealt, damage taken and AI attack frequency at five morale levels. Effects change gradually between those levels and apply to both armies. Named-officer effect strength is adjustable; player characters do not receive their own morale multipliers.
-- **Weapon fusion (1.8.0):** Matching numeric tiles take the source value when it is higher; a lower or equal source increases the destination by `2` (configurable under **Weapon fusion**, or `[WeaponFusion] Increment=2`). Different types retain native replacement. In the game's **Weapon Fusion** screen, press **F6 while choosing the base weapon** to switch between officer and bodyguard weapons. Bodyguards use the same rules, their own inventory and skill names, and up to three slots. Equipped bodyguard weapons can be upgraded without unequipping them. Choose a donor from the same bodyguard weapon family; equipped weapons cannot be consumed as donors. Press Back to return to base selection before switching inventories. Elements and non-numeric rare officer skills retain native rules. Confirmation consumes the selected donor; undoing or revisiting a preview does not award extra increases. Disable `[WeaponFusion] Enabled` for vanilla officer fusion. Values saturate at the signed 32-bit storage limit.
+- **Weapon fusion (1.8.1):** Matching numeric tiles take the source value when it is higher; a lower or equal source increases the destination by `2` (configurable under **Weapon fusion**, or `[WeaponFusion] Increment=2`). Different types retain native replacement. In the game's **Weapon Fusion** screen, press **F6 while choosing the base weapon** to switch between officer and bodyguard weapons. Bodyguards use the same rules, their own inventory and skill names, and up to three slots. Equipped bodyguard weapons can be upgraded without unequipping them. Choose a donor from the same bodyguard weapon family; equipped weapons cannot be consumed as donors. Press Back to return to base selection before switching inventories. If UE4SS loses a queued fusion update, the mod retries after two seconds; each F6 press and recovery is logged in `UE4SS.log`. Elements and non-numeric rare officer skills retain native rules. Confirmation consumes the selected donor; undoing or revisiting a preview does not award extra increases. Disable `[WeaponFusion] Enabled` for vanilla officer fusion. Values saturate at the signed 32-bit storage limit.
 - **Archers (1.8.0):** Ordinary bow-archer troops on both sides can choose a random eligible enemy when acquiring a target, with no player priority. Valid targets are retained. Separately adjust their on-screen damage taken (`0` = no incoming hit damage, `1` = normal, `1.5` = 50% more, range `0`–`10`). Named officers and crossbowmen are excluded; scripted orders remain native. Both options work independently of morale combat scaling.
 - **Morale-driven behavior:** Morale affects aggression, guarding and evasion where a unit's abilities support them. Confident infantry hold tighter formations. Low-morale infantry can fall back, reform and rejoin while keeping their group's strategic orders.
 - **Casualty penalties and panic:** Soldiers, elite troops, captains and subordinate officers have separate morale-loss values. A subordinate leader's defeat can also cause panic among nearby surviving groups, with a cap on the additional morale loss.
@@ -95,8 +95,9 @@ Edits are not saved automatically. Select **Save settings** when finished. Corre
 | Saved settings have no effect | Restart the game and confirm the UI points to the installation you are launching. |
 | The mod does not load or behaves unexpectedly | Check the ASI loader and UE4SS, then inspect `MoraleMatters.log` in the selected folder and `ue4ss/UE4SS.log`. Mods changing the same combat, morale, AI or HUD behavior may conflict. |
 
-The native mod supports a specific game executable and refuses other builds. Its supported executable SHA-256 is:
+The native mod supports these two builds of `DW3CE_RE-Win64-Shipping.exe`. Before installing hooks, it checks the executable hash, the corresponding image size, and the code bytes at the expected locations.
 
-```text
-b57a2d4cbd01c9c5abd651fa42f43a4b8fdae88da6403106cd5f5c1bf4dade70
-```
+| Executable SHA-256 | Expected image size |
+| --- | --- |
+| `b57a2d4cbd01c9c5abd651fa42f43a4b8fdae88da6403106cd5f5c1bf4dade70` | `0xB39E000` |
+| `ca1a65a53242a7cf42493bd2006b8c555d87597387468e4b7a07c52d4eefe92e` | `0xB3D8000` |

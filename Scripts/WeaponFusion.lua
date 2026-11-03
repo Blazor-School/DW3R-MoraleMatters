@@ -2,7 +2,7 @@
 -- in the game's fusion screen. No battle controls or save writes run here.
 return function(bridge)
     local function valid(object) return object and object:IsValid() end
-    local manager, running, lastError, previousGuards, pendingToggle
+    local manager, pending, lastError, previousGuards, pendingToggle
     local function current()
         if not valid(manager) then manager = FindFirstOf("BriefingEquipManager") end
         if not valid(manager) then return end
@@ -37,10 +37,21 @@ return function(bridge)
         previousGuards = guards
     end
     local function schedule(toggle)
-        if toggle then pendingToggle = not pendingToggle end
-        if running then return end
-        running = true
-        ExecuteInGameThread(function()
+        if toggle then
+            print("[MoraleMatters] Weapon fusion F6 pressed.\n")
+            pendingToggle = not pendingToggle
+        end
+        local now = bridge(10) or 0
+        if pending then
+            if now - pending.queuedAt < 2000 then return end
+            print("[MoraleMatters] Weapon fusion callback timed out; retrying.\n")
+        end
+        -- A discarded UE4SS callback must not leave input blocked forever.
+        -- Superseded callbacks can still arrive, so only the current one acts.
+        local request = {queuedAt=now}
+        pending = request
+        local scheduled, errorMessage = pcall(ExecuteInGameThread, function()
+            if pending ~= request then return end
             local requested = pendingToggle
             pendingToggle = false
             local ok, message = pcall(update, requested)
@@ -48,8 +59,15 @@ return function(bridge)
                 lastError = tostring(message)
                 print("[MoraleMatters] Weapon fusion menu: " .. lastError .. "\n")
             end
-            running = false
+            pending = nil
         end)
+        if not scheduled then
+            if pending == request then pending = nil end
+            if lastError ~= tostring(errorMessage) then
+                lastError = tostring(errorMessage)
+                print("[MoraleMatters] Weapon fusion scheduling: " .. lastError .. "\n")
+            end
+        end
     end
     if Key.F6 then RegisterKeyBind(Key.F6, function() schedule(true) end) end
     LoopAsync(250, function() schedule(false); return false end)

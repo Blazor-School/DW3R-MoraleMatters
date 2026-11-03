@@ -9,11 +9,10 @@ public class GameFolderForm : IValidatableObject
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         string exePath = Path.Combine(GamePath, "DW3CE_RE-Win64-Shipping.exe");
-        string tnkPath = Path.Combine(GamePath, "DW3CE_RE-Win64-Shipping.tnk");
 
-        if (!File.Exists(exePath) || !File.Exists(tnkPath))
+        if (!File.Exists(exePath))
         {
-            yield return new ValidationResult("Select the folder containing DW3CE_RE-Win64-Shipping.exe and DW3CE_RE-Win64-Shipping.tnk.", [nameof(GamePath)]);
+            yield return new ValidationResult("Select the folder containing DW3CE_RE-Win64-Shipping.exe.", [nameof(GamePath)]);
         }
     }
 }

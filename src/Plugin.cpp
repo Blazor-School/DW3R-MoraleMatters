@@ -15,7 +15,23 @@ namespace
     volatile LONG Started = 0;
     volatile LONG Status = 0;
     wchar_t IniPath[32768] = {};
-    constexpr char ExpectedHash[] = "b57a2d4cbd01c9c5abd651fa42f43a4b8fdae88da6403106cd5f5c1bf4dade70";
+    struct SupportedExecutable
+    {
+        const char* sha256;
+        DWORD sizeOfImage;
+    };
+    constexpr SupportedExecutable SupportedExecutables[] = {
+        {"b57a2d4cbd01c9c5abd651fa42f43a4b8fdae88da6403106cd5f5c1bf4dade70", 0x0B39E000},
+        {"ca1a65a53242a7cf42493bd2006b8c555d87597387468e4b7a07c52d4eefe92e", 0x0B3D8000},
+    };
+
+    const SupportedExecutable* FindSupportedExecutable(const char* hash)
+    {
+        for (const auto& executable : SupportedExecutables)
+            if (strcmp(hash, executable.sha256) == 0)
+                return &executable;
+        return nullptr;
+    }
 
 #include "HashExecutable.inc"
 
@@ -149,7 +165,7 @@ namespace
         swprintf(logPath, 32768, L"%ls\\MoraleMatters.log", path);
         LogFile = CreateFileW(logPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         ReadSettings();
-        Log("Morale Matters 1.8.0. Officer share=%.2f rally=%.0f/%.0fs healing=%.0f%% cooldown=%.0fs.", Config.officerDamageShare, Config.rallyBonus, Config.rallyDuration, Config.healFraction * 100, Config.healCooldown);
+        Log("Morale Matters 1.8.1. Officer share=%.2f rally=%.0f/%.0fs healing=%.0f%% cooldown=%.0fs.", Config.officerDamageShare, Config.rallyBonus, Config.rallyDuration, Config.healFraction * 100, Config.healCooldown);
         Log("Battlefield: phasedRegroup=%d withdrawal=%.0fm reformScale=%.2f rescue=%d reward=%.0f battleCap=%.0f.", Behavior.withdrawal, Behavior.withdrawalDistance / 100, Behavior.withdrawalScale, Experience.rescue, Experience.rescueReward, Experience.rescueBattleCap);
         Log("Supplies/cohesion: drops=%d comboHits=%d meatBunPercent=%d enemyProximity=%d radius=%.0fm bonus=%.0f (mutual living leaders; no separation grace).", Config.meatBuns, Config.dropComboHits, Config.meatBunPercent, Config.enemyProximity, Config.enemyProximityRadius / 100, Config.enemyProximityBonus);
         Log("Off-screen kill rewards: enabled=%d soldier=%.2f elite=%.2f captain=%.2f officer=%.2f cap=%.2f window=%.2fs (native gains credited).", KillRewards.enabled, KillRewards.soldier, KillRewards.elite, KillRewards.captain, KillRewards.officer, KillRewards.cap, KillRewards.seconds);
@@ -172,7 +188,8 @@ namespace
             return 0;
         const wchar_t* name = wcsrchr(executable, L'\\');
         char hash[65];
-        if (!name || _wcsicmp(name + 1, L"DW3CE_RE-Win64-Shipping.exe") != 0 || !HashExecutable(executable, hash) || strcmp(hash, ExpectedHash))
+        const auto* supported = name && _wcsicmp(name + 1, L"DW3CE_RE-Win64-Shipping.exe") == 0 && HashExecutable(executable, hash) ? FindSupportedExecutable(hash) : nullptr;
+        if (!supported)
         {
             Log("NOT APPLIED: unsupported host or executable SHA-256. No game hooks installed.");
             InterlockedExchange(&Status, 3);
@@ -181,7 +198,7 @@ namespace
         Image = reinterpret_cast<uint8_t*>(GetModuleHandleW(nullptr));
         const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(Image);
         const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(Image + dos->e_lfanew);
-        if (nt->OptionalHeader.SizeOfImage != 0x0B39E000)
+        if (nt->OptionalHeader.SizeOfImage != supported->sizeOfImage)
         {
             Log("NOT APPLIED: in-memory executable layout differs.");
             InterlockedExchange(&Status, 3);

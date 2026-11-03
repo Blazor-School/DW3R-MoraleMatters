@@ -395,6 +395,9 @@ fusion_lua = LuaRuntime(unpack_returned_tuples=True)
 fusion_lua.execute(r'''
 Key={F6='F6'}
 local checks=0
+now,logs=0,{}
+local output=print
+function print(message) logs[#logs+1]=message;output(message) end
 function check(value) checks=checks+1;assert(value,'fusion menu assertion '..checks) end
 function FText(value) return value end
 function RegisterKeyBind(_,callback) pressF6=callback end
@@ -420,6 +423,7 @@ function FindFirstOf(name) check(name=='BriefingEquipManager');return manager en
 status,mode,queries,toggles=1,1,0,0
 function bridge(op,address,toggle)
  if op==0 then return status end
+ if op==10 then return now end
  check(op==14 and address==123)
  queries=queries+1
  if toggle==1 then
@@ -448,6 +452,46 @@ tick();pressF6();check(mode==1)
 queued();check(mode==2) -- A queued polling update cannot swallow F6.
 ExecuteInGameThread=immediate
 before=queries;mode=0;pressF6();check(mode==0)
-manager.valid=false;manager=nil;pressF6();tick();check(queries==before+1)
+-- Lost polling work retains input; an obsolete callback cannot consume it or
+-- clear the replacement, even if UE4SS eventually dispatches it out of order.
+local callbacks={}
+function ExecuteInGameThread(callback) callbacks[#callbacks+1]=callback end
+mode=1;before=toggles;tick()
+local logCount=#logs;pressF6()
+check(#logs==logCount+1 and logs[#logs]:find('F6 pressed',1,true)~=nil)
+check(#callbacks==1 and toggles==before)
+now=1999;tick();check(#callbacks==1)
+now=2000;tick();check(#callbacks==2 and logs[#logs]:find('timed out',1,true)~=nil)
+callbacks[1]();check(toggles==before)
+tick();check(#callbacks==2) -- Old callback did not release the new request.
+callbacks[2]();check(mode==2 and toggles==before+1)
+callbacks[1]();callbacks[2]();check(toggles==before+1)
+-- Also recover work lost after F6 itself queues it, including repeated losses.
+callbacks={};pressF6();check(#callbacks==1 and mode==2)
+now=4000;tick();check(#callbacks==2)
+now=6000;tick();check(#callbacks==3)
+callbacks[2]();check(mode==2)
+callbacks[3]();check(mode==1 and toggles==before+2)
+callbacks[1]();check(mode==1 and toggles==before+2)
+-- A stale callback arriving after completion must not steal newer F6 input.
+pressF6();check(#callbacks==4)
+callbacks[1]();check(mode==1)
+callbacks[4]();check(mode==2 and toggles==before+3)
+-- Retain the existing parity behavior for two presses while work is queued.
+callbacks={};before=toggles;pressF6();pressF6()
+now=8000;tick();check(#callbacks==2)
+callbacks[2]();check(mode==2 and toggles==before)
+-- A synchronous scheduling error must release the request and preserve input.
+function ExecuteInGameThread() error('fixture scheduling failure') end
+pressF6();check(logs[#logs]:find('Weapon fusion scheduling:',1,true)~=nil)
+check(logs[#logs-1]:find('F6 pressed',1,true)~=nil)
+ExecuteInGameThread=immediate;tick();check(mode==1 and toggles==before+1)
+-- An error inside the menu update also releases scheduling for another press.
+-- Simulate this through a widget method used by the real update function.
+local visible=selector.IsVisible
+function selector:IsVisible() error('fixture menu failure') end
+pressF6();check(logs[#logs]:find('Weapon fusion menu:',1,true)~=nil)
+selector.IsVisible=visible;pressF6();check(mode==2)
+before=queries;manager.valid=false;manager=nil;pressF6();tick();check(queries==before)
 ''')
 print(f'Passed {fusion_lua.globals().countChecks()} F6 fusion-menu, hint, inventory-mode, visibility and disabled-state assertions.')
