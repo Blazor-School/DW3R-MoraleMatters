@@ -52,6 +52,12 @@ public class ModSettingForm : IValidatableObject
     // [SurpriseForces]
     public bool SurpriseForcesEnabled { get; set; } = true;
 
+    [Range(0.0, 100.0)]
+    public double SurpriseForcesScriptedEventMoraleBonusPercent { get; set; } = 30;
+
+    [Range(1.0, 86400.0)]
+    public double SurpriseForcesScriptedEventMoraleBonusDurationSeconds { get; set; } = 60;
+
     // [Drops]
     public bool DropsEnabled { get; set; } = true;
 

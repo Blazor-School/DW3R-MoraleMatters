@@ -452,46 +452,46 @@ tick();pressF6();check(mode==1)
 queued();check(mode==2) -- A queued polling update cannot swallow F6.
 ExecuteInGameThread=immediate
 before=queries;mode=0;pressF6();check(mode==0)
--- Lost polling work retains input; an obsolete callback cannot consume it or
--- clear the replacement, even if UE4SS eventually dispatches it out of order.
+-- A missed refresh stays parked until F6 supersedes it.
 local callbacks={}
 function ExecuteInGameThread(callback) callbacks[#callbacks+1]=callback end
 mode=1;before=toggles;tick()
-local logCount=#logs;pressF6()
-check(#logs==logCount+1 and logs[#logs]:find('F6 pressed',1,true)~=nil)
-check(#callbacks==1 and toggles==before)
 now=1999;tick();check(#callbacks==1)
-now=2000;tick();check(#callbacks==2 and logs[#logs]:find('timed out',1,true)~=nil)
+now=2000;tick();check(#callbacks==1)
+pressF6();check(#callbacks==2 and logs[#logs]:find('timed out',1,true)~=nil)
 callbacks[1]();check(toggles==before)
-tick();check(#callbacks==2) -- Old callback did not release the new request.
+tick();check(#callbacks==2)
 callbacks[2]();check(mode==2 and toggles==before+1)
 callbacks[1]();callbacks[2]();check(toggles==before+1)
--- Also recover work lost after F6 itself queues it, including repeated losses.
+
+-- A fresh F6 press replaces a lost toggle and applies exactly one switch.
 callbacks={};pressF6();check(#callbacks==1 and mode==2)
-now=4000;tick();check(#callbacks==2)
-now=6000;tick();check(#callbacks==3)
-callbacks[2]();check(mode==2)
+now=4000;tick();check(#callbacks==1)
+pressF6();check(#callbacks==2)
+now=6000;tick();check(#callbacks==2)
+pressF6();check(#callbacks==3)
+callbacks[1]();callbacks[2]();check(mode==2)
 callbacks[3]();check(mode==1 and toggles==before+2)
-callbacks[1]();check(mode==1 and toggles==before+2)
--- A stale callback arriving after completion must not steal newer F6 input.
-pressF6();check(#callbacks==4)
-callbacks[1]();check(mode==1)
-callbacks[4]();check(mode==2 and toggles==before+3)
--- Retain the existing parity behavior for two presses while work is queued.
+tick();check(#callbacks==4)
+callbacks[4]();check(label.text=='Officer weapons | F6: Bodyguards')
+
+-- Retain parity for two presses while work is queued and still fresh.
 callbacks={};before=toggles;pressF6();pressF6()
-now=8000;tick();check(#callbacks==2)
-callbacks[2]();check(mode==2 and toggles==before)
--- A synchronous scheduling error must release the request and preserve input.
+check(#callbacks==1)
+callbacks[1]();check(mode==1 and toggles==before)
+
+-- A synchronous scheduling error releases the request for the next press.
 function ExecuteInGameThread() error('fixture scheduling failure') end
 pressF6();check(logs[#logs]:find('Weapon fusion scheduling:',1,true)~=nil)
 check(logs[#logs-1]:find('F6 pressed',1,true)~=nil)
-ExecuteInGameThread=immediate;tick();check(mode==1 and toggles==before+1)
+ExecuteInGameThread=immediate;tick();check(mode==1 and toggles==before)
+pressF6();check(mode==2 and toggles==before+1)
 -- An error inside the menu update also releases scheduling for another press.
 -- Simulate this through a widget method used by the real update function.
 local visible=selector.IsVisible
 function selector:IsVisible() error('fixture menu failure') end
 pressF6();check(logs[#logs]:find('Weapon fusion menu:',1,true)~=nil)
-selector.IsVisible=visible;pressF6();check(mode==2)
+selector.IsVisible=visible;pressF6();check(mode==1)
 before=queries;manager.valid=false;manager=nil;pressF6();tick();check(queries==before)
 ''')
 print(f'Passed {fusion_lua.globals().countChecks()} F6 fusion-menu, hint, inventory-mode, visibility and disabled-state assertions.')

@@ -2,7 +2,7 @@
 -- in the game's fusion screen. No battle controls or save writes run here.
 return function(bridge)
     local function valid(object) return object and object:IsValid() end
-    local manager, pending, lastError, previousGuards, pendingToggle
+    local manager, pending, lastError, previousGuards
     local function current()
         if not valid(manager) then manager = FindFirstOf("BriefingEquipManager") end
         if not valid(manager) then return end
@@ -37,29 +37,28 @@ return function(bridge)
         previousGuards = guards
     end
     local function schedule(toggle)
-        if toggle then
-            print("[MoraleMatters] Weapon fusion F6 pressed.\n")
-            pendingToggle = not pendingToggle
-        end
+        if toggle then print("[MoraleMatters] Weapon fusion F6 pressed.\n") end
         local now = bridge(10) or 0
         if pending then
-            if now - pending.queuedAt < 2000 then return end
-            print("[MoraleMatters] Weapon fusion callback timed out; retrying.\n")
+            if not toggle then return end
+            if now - pending.queuedAt < 2000 then
+                pending.toggle = not pending.toggle
+                return
+            end
+            print("[MoraleMatters] Weapon fusion callback timed out; replacing it on F6.\n")
         end
-        -- A discarded UE4SS callback must not leave input blocked forever.
-        -- Superseded callbacks can still arrive, so only the current one acts.
-        local request = {queuedAt=now}
+        -- Polling refreshes the picker but never replaces a missed callback.
+        -- A fresh F6 press supersedes expired work, including its old input.
+        local request = {queuedAt=now, toggle=toggle}
         pending = request
         local scheduled, errorMessage = pcall(ExecuteInGameThread, function()
             if pending ~= request then return end
-            local requested = pendingToggle
-            pendingToggle = false
-            local ok, message = pcall(update, requested)
+            local ok, message = pcall(update, request.toggle)
             if not ok and lastError ~= tostring(message) then
                 lastError = tostring(message)
                 print("[MoraleMatters] Weapon fusion menu: " .. lastError .. "\n")
             end
-            pending = nil
+            if pending == request then pending = nil end
         end)
         if not scheduled then
             if pending == request then pending = nil end

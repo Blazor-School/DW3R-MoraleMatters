@@ -44,6 +44,8 @@ namespace MoraleMatters
         bool attributes = true;
         bool reinforcements = true;
         bool surpriseForces = true;
+        float scriptedEventMoraleBonusPercent = 30.0f;
+        float scriptedEventMoraleBonusDuration = 60.0f;
         bool enemyProximity = true;
         bool meatBuns = true;
         bool weaponFusion = true;
@@ -86,6 +88,8 @@ namespace MoraleMatters
         float nativeGains = 0;
         float proximityBonus = 0;
         float proximitySample = 1;
+        float scriptedEventBonus = 0;
+        float scriptedEventRemaining = 0;
 
         void CaptureBase(float current)
         {
@@ -94,7 +98,7 @@ namespace MoraleMatters
             base = next;
         }
 
-        float Effective() const { return Clamp(base + (remaining > 0 ? bonus : 0) + proximityBonus, MoraleMinimum, MoraleMaximum); }
+        float Effective() const { return Clamp(base + (remaining > 0 ? bonus : 0) + (scriptedEventRemaining > 0 ? scriptedEventBonus : 0) + proximityBonus, MoraleMinimum, MoraleMaximum); }
         float VisibleBonus() const { return Effective() - Clamp(base, MoraleMinimum, MoraleMaximum); }
 
         void Observe(float current)
@@ -140,6 +144,7 @@ namespace MoraleMatters
         {
             Observe(nativeMorale);
             remaining = seconds >= remaining ? 0 : remaining - seconds;
+            scriptedEventRemaining = fmaxf(0, scriptedEventRemaining - seconds);
             if (remaining == 0)
                 bonus = 0;
             lastWritten = Effective();
@@ -156,6 +161,18 @@ namespace MoraleMatters
             lastWritten = Effective();
             nativeMorale = lastWritten;
             return true;
+        }
+
+        void ApplyScriptedEventBonus(float& nativeMorale, const Settings& settings)
+        {
+            Observe(nativeMorale);
+            scriptedEventBonus = settings.scriptedEventMoraleBonusPercent * MoraleMaximum / 100.0f;
+            scriptedEventRemaining = settings.scriptedEventMoraleBonusDuration;
+            if (depth == 0)
+            {
+                lastWritten = Effective();
+                nativeMorale = lastWritten;
+            }
         }
 
         void SetProximity(float& nativeMorale, bool nearby, const Settings& settings)

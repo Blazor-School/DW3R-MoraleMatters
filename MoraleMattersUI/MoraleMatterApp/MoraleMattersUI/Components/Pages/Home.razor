@@ -573,10 +573,37 @@
                         <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
+                                    <RoarIcon Name="timeline" />
+                                    Scripted events
+                                </div>
+                                <div class="wa-body-s">Historical events and scripted occurrences.</div>
+                            </div>
+                            <div class="wa-stack">
+                                <RoarSwitch @bind-Value="SettingForm.SurpriseForcesEnabled" Hint="Maximize the arriving corps&#39;s base morale and grant temporary side-wide morale for scripted arrivals.">Surprise forces and scripted reinforcements</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.SurpriseForcesEnabled" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.SurpriseForcesScriptedEventMoraleBonusPercent" Hint="Temporary morale for living corps on the reinforcing side. Set to 0 to disable the bonus." Label="Scripted event morale bonus" min="0" max="100" step="1">
+                                            <span slot="@InputSlot.End">%</span>
+                                        </RoarInputNumber>
+                                        <ValidationMessage For="() => SettingForm.SurpriseForcesScriptedEventMoraleBonusPercent" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.SurpriseForcesScriptedEventMoraleBonusDurationSeconds" Label="Scripted event bonus duration" min="1" max="86400" step="1">
+                                            <span slot="@InputSlot.End">s</span>
+                                        </RoarInputNumber>
+                                        <ValidationMessage For="() => SettingForm.SurpriseForcesScriptedEventMoraleBonusDurationSeconds" />
+                                    </div>
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
                                     <RoarIcon Name="shield-halved" />
                                     Off-screen battles &amp; reinforcements
                                 </div>
-                                <div class="wa-body-s">Distant combat, confirmed kill rewards, reinforcement waves and surprise forces.</div>
+                                <div class="wa-body-s">Distant combat, confirmed kill rewards, reinforcement waves.</div>
                             </div>
                             <div class="wa-stack">
                                 <RoarSwitch @bind-Value="SettingForm.OffscreenEnabled" Hint="Apply the mod&#39;s named-officer damage sharing during off-screen combat.">Off-screen officer damage sharing</RoarSwitch>
@@ -634,13 +661,6 @@
                                     <div class="wa-stack wa-gap-xs">
                                         <RoarInputNumber @bind-Value="SettingForm.ReinforcementsWaveSeconds" Hint="Battle seconds without another arrival before nearby arrivals are treated as one completed wave." Label="Wave seconds" min="0.25" max="10" step="0.25" />
                                         <ValidationMessage For="() => SettingForm.ReinforcementsWaveSeconds" />
-                                    </div>
-                                </div>
-                                <h3 class="wa-heading-s">Surprise forces</h3>
-                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
-                                    <div class="wa-stack wa-gap-xs">
-                                        <RoarSwitch @bind-Value="SettingForm.SurpriseForcesEnabled" Hint="Raise an activated surprise force&#39;s corps to maximum base morale, 899 points, on arrival.">Maximum morale on surprise-force arrival</RoarSwitch>
-                                        <ValidationMessage For="() => SettingForm.SurpriseForcesEnabled" />
                                     </div>
                                 </div>
                             </div>
@@ -916,7 +936,7 @@
                     </div>
                     <div class="wa-flank">
                         <img src="morale_matters_icon.png" alt="MoraleMatters" width="32" height="32" />
-                        <div class="wa-body-m">UI version: @(AppInfo.Current.Version.Major).@(AppInfo.Current.Version.Minor)</div>
+                        <div class="wa-body-m">UI version: @(AppInfo.Current.Version.ToString(3))</div>
                     </div>
                 </div>
             </RoarCard>

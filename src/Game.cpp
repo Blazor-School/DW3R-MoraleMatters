@@ -26,7 +26,7 @@ namespace MoraleMatters
     static ArrivalState Arrivals[MaxGroups] = {};
     struct ScenarioEvent { void* scenario; int cause; bool known; };
     static ScenarioEvent GroupEvents[MaxGroups] = {};
-    struct EventCredit { void* scenario; int cause; int corps; float unused; };
+    struct EventCredit { void* scenario; int cause; int corps; float unused; bool sideBonusApplied; };
     static EventCredit EventCredits[16384] = {};
     struct WaveRecord { float paid; };
     static WaveRecord WaveRecords[MaxGroups] = {};
@@ -259,7 +259,7 @@ namespace MoraleMatters
         if (!key.known || EventCount >= 16384)
             return -1;
         const int index = EventCount++;
-        EventCredits[index] = {key.scenario, key.cause, corps, 0};
+        EventCredits[index] = {key.scenario, key.cause, corps, 0, false};
         return index;
     }
 
@@ -275,6 +275,33 @@ namespace MoraleMatters
                 return;
         if (LinkCount < MaxGroups)
             EventLinks[LinkCount++] = {event, wave};
+    }
+
+    static void ApplyScriptedArrivalBonus(const ScenarioEvent& key, int side)
+    {
+        if (!key.known || Config.scriptedEventMoraleBonusPercent <= 0)
+            return;
+        // Negative indices reserve one ledger entry per side instead of per corps.
+        const int event = FindEvent(key, -1 - side);
+        if (event < 0 || EventCredits[event].sideBonusApplied)
+            return;
+        EventCredits[event].sideBonusApplied = true;
+        for (int id = 0; id < CorpsCount(); ++id)
+        {
+            void* corps = CorpsObject(id);
+            if (At<int>(corps, 0xC) != side)
+                continue;
+            void* commander = Group(At<int>(corps, 0x14));
+            if (!commander || At<int>(commander, 0x38) != id || At<int>(commander, 0x40) != side || At<uint8_t>(commander, 0x191) || At<uint8_t>(commander, 0x198))
+                continue;
+            const int attribute = At<uint8_t>(commander, 0x2DFD);
+            if (attribute == 1 || attribute == 2 || !GroupAlive(commander))
+                continue;
+            auto& morale = At<float>(corps, 0x28);
+            const float before = morale;
+            Corps[id].ApplyScriptedEventBonus(morale, Config);
+            RecordMorale(id, MoraleReason::Surprise, morale - before);
+        }
     }
 
     static void CreditWaveEvents(int wave, float& credit, float target)
@@ -324,18 +351,28 @@ namespace MoraleMatters
             return OriginalScenarioEffect(effect, cause, parameter, flag);
         }
         float before[MaxCorps];
+        bool scriptedSet[MaxCorps];
         const int count = CorpsCount();
         for (int id = 0; id < count; ++id)
         {
-            Corps[id].Observe(At<float>(CorpsObject(id), 0x28));
-            before[id] = Corps[id].nativeGains;
+            auto& state = Corps[id];
+            auto& morale = At<float>(CorpsObject(id), 0x28);
+            scriptedSet[id] = type == 6 && state.scriptedEventRemaining > 0;
+            if (scriptedSet[id])
+                state.Begin(morale);
+            else
+                state.Observe(morale);
+            before[id] = state.nativeGains;
         }
         const bool result = OriginalScenarioEffect(effect, cause, parameter, flag);
         for (int id = 0; id < count; ++id)
         {
             auto& morale = At<float>(CorpsObject(id), 0x28);
             auto& state = Corps[id];
-            state.Observe(morale);
+            if (scriptedSet[id])
+                state.End(morale);
+            else
+                state.Observe(morale);
             float gain = state.nativeGains - before[id];
             if (gain <= 0)
                 continue;
@@ -371,8 +408,9 @@ namespace MoraleMatters
         const int corps = At<int>(group, 0x38);
         const int side = At<int>(group, 0x40);
         const int attribute = At<uint8_t>(group, 0x2DFD);
-        const bool surprise = attribute == 1;
-        const bool enabled = surprise ? Config.surpriseForces : attribute == 2 && Config.reinforcements;
+        const bool scriptedReinforcement = attribute == 2 && id >= 0 && id < GroupCount() && Group(id) == group && GroupEvents[id].known;
+        const bool surprise = Config.surpriseForces && (attribute == 1 || scriptedReinforcement);
+        const bool enabled = surprise || (attribute == 2 && Config.reinforcements);
         const bool candidate = enabled && id >= 0 && id < GroupCount() && Group(id) == group && corps >= 0 && corps < CorpsCount() && side >= 0 && side < 2 && side == At<int>(CorpsObject(corps), 0xC) && !Arrivals[id].seen && value == 0 && !At<uint8_t>(group, 0x110) && !At<uint8_t>(group, 0x186);
         if (candidate)
         {
@@ -420,6 +458,8 @@ namespace MoraleMatters
                         GroupEvents[id] = GroupEvents[parent];
                 }
                 LinkEvent(GroupEvents[id], corps, arrival.wave);
+                if (arrival.surprise)
+                    ApplyScriptedArrivalBonus(GroupEvents[id], arrival.side);
                 arrival.pending = false;
             }
             else
@@ -527,8 +567,9 @@ namespace MoraleMatters
         {
             AdvanceExperience(id, dt);
             const float beforeExpiry = morale;
+            const bool supportExpires = state.remaining > 0 && dt >= state.remaining;
             state.Advance(dt, morale);
-            RecordMorale(id, MoraleReason::SupportExpired, morale - beforeExpiry);
+            RecordMorale(id, supportExpires ? MoraleReason::SupportExpired : MoraleReason::BattleEvent, morale - beforeExpiry);
             UpdateEnemyProximity(id, dt, morale);
             {
                 KillRewardGuard guard;

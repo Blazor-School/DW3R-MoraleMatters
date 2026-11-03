@@ -121,6 +121,12 @@ static void SetupSurprise()
     ResetBattle(ManagerMemory);
 }
 
+static void SetupOrdinaryReinforcements()
+{
+    Setup();
+    Config.surpriseForces = false;
+}
+
 #include "NativeEntryProbe.inc"
 
 int main()
@@ -229,7 +235,7 @@ int main()
     Advance(0, 3);
     CHECK(Near(Corps[0].base, 400)); // Side changes are transfers, not arrivals.
 
-    Setup();
+    SetupOrdinaryReinforcements();
     Effect(10, 42, 0);
     CHECK(GroupEvents[2].known && GroupEvents[3].known && GroupEvents[2].cause == 42);
     SpecialAttribute(Group(2), 0);
@@ -244,7 +250,7 @@ int main()
     CHECK(Near(Corps[0].base, 470)); // Native total +70 is preserved; no mod grant remains.
     CHECK(Near(WaveRecords[0].paid, 0));
 
-    Setup();
+    SetupOrdinaryReinforcements();
     Effect(8, 42, 30); // Same-event native award well before the appearance.
     Advance(0, 10);
     Effect(10, 42, 0);
@@ -254,7 +260,7 @@ int main()
     CHECK(Near(Corps[0].base, 430));
     CHECK(Near(Reinforcements[0].nativeCredit, 30));
 
-    Setup();
+    SetupOrdinaryReinforcements();
     Effect(10, 42, 0);
     SpecialAttribute(Group(2), 0);
     At<uint8_t>(Group(2), 0x191) = 0;
@@ -262,7 +268,7 @@ int main()
     Effect(8, 99, 30); // Another event is an ordinary later native award.
     CHECK(Near(Corps[0].base, 455));
 
-    Setup();
+    SetupOrdinaryReinforcements();
     CHECK(Corps[0].Rally(At<float>(CorpsObject(0), 0x28), Config));
     Effect(10, 42, 0);
     SpecialAttribute(Group(2), 0);
@@ -273,7 +279,7 @@ int main()
     CHECK(Near(Corps[0].base, 425) && Near(At<float>(CorpsObject(0), 0x28), 525));
     CHECK(Near(WaveRecords[0].paid, 10));
 
-    Setup();
+    SetupOrdinaryReinforcements();
     Effect(8, 42, 10);
     Effect(10, 42, 0);
     SpecialAttribute(Group(2), 0);
@@ -281,7 +287,7 @@ int main()
     Advance(0, 3);
     CHECK(Near(Reinforcements[0].nativeCredit, 10) && Near(Corps[0].base, 425)); // Window/event credit is not doubled.
 
-    Setup();
+    SetupOrdinaryReinforcements();
     Effect(9, 42, 2);
     CHECK(GroupEvents[2].known);
     SpecialAttribute(Group(2), 0);
@@ -290,7 +296,7 @@ int main()
     Effect(8, 42, 30);
     CHECK(Near(Corps[0].base, 450)); // Belong-group appearance and child association.
 
-    Setup();
+    SetupOrdinaryReinforcements();
     Effect(10, 42, 0);
     SpecialAttribute(Group(2), 0);
     At<uint8_t>(Group(2), 0x191) = 0;
@@ -303,7 +309,7 @@ int main()
     Effect(8, 42, 30);
     CHECK(Near(Corps[0].base, 460) && Near(WaveRecords[1].paid, 0));
 
-    Setup();
+    SetupOrdinaryReinforcements();
     Effect(10, 42, 0);
     Effect(10, 43, 0, 3);
     SpecialAttribute(Group(2), 0);
@@ -315,7 +321,7 @@ int main()
     Effect(8, 42, 30);
     CHECK(Near(Corps[0].base, 460)); // Both event keys share one wave's paid budget.
 
-    Setup();
+    SetupOrdinaryReinforcements();
     At<float>(CorpsObject(0), 0x28) = 890;
     SpecialAttribute(Group(2), 0);
     Advance(0, 3);
@@ -459,6 +465,39 @@ int main()
     CHECK(Near(Corps[0].base, MoraleMaximum));
     ResetBattle(ManagerMemory);
     CHECK(Arrivals[2].seen && Arrivals[6].seen && !Arrivals[3].seen);
+
+    Setup();
+    Config.reinforcements = false;
+    At<int>(Group(2), 0x44) = 14;
+    At<int>(Group(2), 0x40) = 1;
+    At<int>(CorpsObject(0), 0xC) = 1;
+    At<uint8_t>(Group(5), 0x2DFD) = 0; // A living corps on the opposing side.
+    Effect(9, 4, 2, 14, 1); // Liu Qi's Wei Changban appearance arguments.
+    CHECK(GroupEvents[2].known);
+    SpecialAttribute(Group(2), 0);
+    At<uint8_t>(Group(2), 0x191) = 1;
+    CorpsTick(CorpsObject(0), 0.01f);
+    CHECK(Near(Corps[0].base, 400));
+    At<uint8_t>(Group(2), 0x191) = 0;
+    CorpsTick(CorpsObject(0), 0.01f);
+    CHECK(Near(Corps[0].base, MoraleMaximum) && Near(At<float>(CorpsObject(1), 0x28), 400));
+
+    Setup();
+    At<uint8_t>(Group(5), 0x2DFD) = 0;
+    ResetBattle(ManagerMemory);
+    Effect(9, 4, 2, 2);
+    SpecialAttribute(Group(2), 0);
+    CorpsTick(CorpsObject(0), 0.01f);
+    CHECK(Near(Corps[0].base, MoraleMaximum));
+    CHECK(Near(Corps[1].base, 400) && Near(Corps[1].Effective(), 669.7f));
+    CorpsTick(CorpsObject(1), 0);
+    CHECK(Near(Corps[1].scriptedEventRemaining, 60));
+    CorpsTick(CorpsObject(1), 20);
+    SpecialAttribute(Group(3), 0); // A later group from the same paragraph must not refresh the bonus.
+    CorpsTick(CorpsObject(0), 0.01f);
+    CHECK(Near(Corps[1].scriptedEventRemaining, 40));
+    CorpsTick(CorpsObject(1), 40);
+    CHECK(Near(Corps[1].Effective(), 400));
 
     SetupSurprise();
     At<uint8_t>(Group(3), 0x2DFD) = 2;
