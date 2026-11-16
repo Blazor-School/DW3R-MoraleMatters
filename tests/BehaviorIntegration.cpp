@@ -1,5 +1,6 @@
 // Production callbacks with synthetic memory; no running game is accessed.
 #include "../src/Game.cpp"
+#include "GameTestAddresses.h"
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -7,9 +8,11 @@ using namespace MoraleMatters;
 static int Assertions = 0;
 #define CHECK(expression) do { ++Assertions; if (!(expression)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expression); return 1; } } while (0)
 static bool Near(float a, float b) { return fabsf(a - b) < 0.001f; }
-alignas(16) static uint8_t ManagerMemory[0x100], GroupMemory[6 * 0x2E68], CorpsMemory[2 * 0xEF8];
+alignas(16) static uint8_t ManagerMemory[0x100], GroupMemory[6 * 0x2E70], CorpsMemory[2 * 0xEF8];
 alignas(16) static uint8_t CharacterMemory[0x900], ControllerMemory[0x510], BlackboardMemory[0x100];
+alignas(16) static uint8_t EnemyMemory[0x900], CharacterRoot[0x218], EnemyRoot[0x218];
 static int ObservedRank, ObservedMode, StatusChanges;
+static int AttackRequests, AttackReleases;
 static bool Stopped, ReassignRank, ReassignMode, Reenter;
 
 namespace MoraleMatters { void Log(const char*, ...) {} }
@@ -19,6 +22,14 @@ static void FakeRaise(void* corps, float amount, int) { At<float>(corps, 0x28) =
 static void FakeLower(void* corps, float amount, int cause) { FakeRaise(corps, -amount, cause); }
 static void FakeKill(void* group, uint8_t leader, int, int) { if (leader) At<uint8_t>(group, 0x110) = 1; }
 static void* FakeOwner(void* weak) { return At<void*>(weak, 0); }
+static void* FakeTarget(void*) { return EnemyMemory; }
+static bool FakeAttackTicket(void*) { ++AttackRequests; return true; }
+static void FakeReleaseTicket(void* controller, float) { ++AttackReleases; At<int>(controller, 0x3F0) = At<int>(controller, 0x3F8) = 0; }
+static constexpr uint64_t AttackTag = 1, StanceTag = 2, HeavyAttackTag = 3, GuardTagValue = 4;
+static uint64_t EndedAbilities;
+static int AbilityActivations;
+static void FakeEndAbility(void*, const uint64_t* tag) { EndedAbilities |= *tag; }
+static bool FakeActivateAbility(void*, int, const void*, void*, const void*, const void*) { ++AbilityActivations; return true; }
 static bool FakeStopped(void*, void*, int) { return Stopped; }
 static void FakeStatus(void* controller, uint8_t status) { ++StatusChanges; At<uint8_t>(controller, 0x3EC) = status; }
 static void* FakeOffset(void*, double* result, int) { result[0] = 100; result[1] = 200; return result; }
@@ -59,7 +70,7 @@ static void Setup(float morale = 400)
     }
     for (int id = 0; id < 6; ++id)
     {
-        void* group = GroupMemory + id * 0x2E68;
+        void* group = GroupMemory + id * FixtureGroupStride;
         At<void*>(group, 0x28) = ManagerMemory;
         At<int>(group, 0x3C) = id;
         At<int>(group, 0x38) = id / 3;
@@ -80,7 +91,7 @@ static void Setup(float morale = 400)
     At<uint8_t>(CharacterMemory, 0x74C) = 2;
     At<int>(CharacterMemory, 0x7A0) = 1;
     At<int>(CharacterMemory, 0x7A4) = 0;
-    Image = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(&FakeDead) - 0x13AE060);
+    Image = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(&FakeDead) - GameRva<0x13AE060>());
     OriginalCorpsTick = OriginalGroupTick = &FakeTick;
     OriginalRaise = &FakeRaise;
     OriginalLower = &FakeLower;
@@ -90,6 +101,10 @@ static void Setup(float morale = 400)
     BehaviorOwner = &FakeOwner;
     BehaviorStopped = &FakeStopped;
     SetBehaviorStatus = &FakeStatus;
+    OriginalAttackTicket = &FakeAttackTicket;
+    OriginalAttackWait = &FakeReleaseTicket;
+    ArcherTarget = nullptr;
+    AttackRequests = AttackReleases = 0;
     Stopped = ReassignRank = ReassignMode = Reenter = false;
     StatusChanges = 0;
     ResetBattle(ManagerMemory);
@@ -97,8 +112,9 @@ static void Setup(float morale = 400)
 
 static void Advance(int seconds) { for (int i = 0; i < seconds; ++i) CorpsTick(CorpsObject(0), 1); }
 
-int main()
+int main(int argc, char** argv)
 {
+    CHECK(SelectBattleFixture(argc, argv));
     Setup();
     for (int rank = 0; rank < 36; ++rank)
         for (int morale = 1; morale <= 899; morale += 10)
@@ -270,6 +286,138 @@ int main()
     ResetBattle(ManagerMemory);
     CHECK(Near(GroupBehavior[1].regroupRemaining, 0) && Near(CorpsBehavior[0].quietTime, 0));
 
-    printf("PASS: %d assertions for native AI/formation callbacks, regroup, panic, recovery, leadership and profile families.\n", Assertions);
+    Setup(110);
+    Behavior.corpsBreak = true;
+    Behavior.recovery = false;
+    At<int>(Group(1), 0x178) = 2;
+    At<int>(Group(2), 0x178) = 2;
+    At<double>(Group(1), 0x2DA8) = 1000;
+    At<uint8_t>(Group(2), 0x2D21) = 2;
+    GroupTick(Group(1), 1);
+    CHECK(RegroupPhase(1) == 0 && RequestAttackTicket(ControllerMemory)); // Above the break anchor.
+    Lower(CorpsObject(0), 10, -1);
+    Advance(1);
+    CHECK(CorpsBehavior[0].formation.broken && !CorpsBehavior[1].formation.broken);
+    At<int>(ControllerMemory, 0x3F0) = 1;
+    CHECK(!RequestAttackTicket(ControllerMemory) && AttackRequests == 1 && AttackReleases == 1);
+    CHECK(!RequestAttackTicket(ControllerMemory) && AttackReleases == 1);
+    At<int>(CharacterMemory, 0x7A4) = -1;
+    const auto captainRank = At<uint8_t>(Group(1), 0x2D20);
+    At<uint8_t>(Group(1), 0x2D20) = 5;
+    CHECK(RequestAttackTicket(ControllerMemory)); // Named officers retain attacks.
+    At<uint8_t>(Group(1), 0x2D20) = captainRank;
+    At<int>(CharacterMemory, 0x7A4) = 0;
+    Stopped = true;
+    CHECK(RequestAttackTicket(ControllerMemory));
+    Stopped = false;
+    At<uint8_t>(Group(1), 0x110) = 1;
+    CHECK(!RequestAttackTicket(ControllerMemory)); // Captain loss does not free surviving soldiers.
+    At<uint8_t>(Group(1), 0x110) = 0;
+    At<int>(CharacterMemory, 0x7A0) = 2;
+    CHECK(!RequestAttackTicket(ControllerMemory)); // Ordinary archers participate.
+    At<uint8_t>(Group(2), 0x2E58) = 1;
+    CHECK(!RequestAttackTicket(ControllerMemory)); // Ordinary infantry still lose attacks in a fixed formation.
+    At<int>(CharacterMemory, 0x7A4) = -1;
+    At<uint8_t>(Group(2), 0x2D20) = 6;
+    CHECK(!RequestAttackTicket(ControllerMemory) && InfantryBreakPhase(2, -1) == 4); // Unnamed captain.
+    At<uint16_t>(Group(2), 0x2D0C) = 405;
+    CHECK(RequestAttackTicket(ControllerMemory) && InfantryBreakPhase(2, -1) < 0); // Vice General.
+    CHECK(InfantryBreakPhase(2, 0) == 4); // The Vice General's soldiers still break.
+    At<int>(CharacterMemory, 0x7A4) = 0;
+    At<int>(CharacterMemory, 0x7A0) = 1;
+    Advance(20);
+    GroupTick(Group(1), 1);
+    CHECK(RegroupPhase(1) == 4 && !RequestAttackTicket(ControllerMemory)); // No regroup timer expiry.
+    FormationOffset(Group(1), result, 0);
+    CHECK(Near(static_cast<float>(result[0]), -755));
+    BehaviorTick(ControllerMemory, 0.1f);
+    CHECK(ObservedMode == 0 && At<int>(Group(1), 0x178) == 2);
+    ArcherTarget = &FakeTarget;
+    At<void*>(CharacterMemory, 0x1C0) = CharacterRoot;
+    At<void*>(EnemyMemory, 0x1C0) = EnemyRoot;
+    At<double>(EnemyRoot, 0x200) = 300;
+    BehaviorTick(ControllerMemory, 0.1f);
+    CHECK(ObservedMode == 2 && !RequestAttackTicket(ControllerMemory)); // Close melee keeps native defense.
+
+    CHECK(Corps[0].Rally(At<float>(CorpsObject(0), 0x28), Config));
+    Advance(2);
+    CHECK(RegroupPhase(1) == 4 && CorpsRallyPhase(0) == 4);
+    Advance(1);
+    CHECK(RegroupPhase(1) == 5 && CorpsRallyPhase(0) == 5 && !RequestAttackTicket(ControllerMemory));
+    Advance(1);
+    GroupTick(Group(1), 1);
+    CHECK(RegroupPhase(1) == 5 && !RequestAttackTicket(ControllerMemory));
+    Advance(1);
+    GroupTick(Group(1), 1);
+    CHECK(RegroupPhase(1) == 0 && RequestAttackTicket(ControllerMemory));
+    CHECK(GroupBehavior[1].regroupRemaining == 0); // Legacy morale threshold cannot restart regrouping.
+    CHECK(CorpsBehavior[0].formation.Rejoining(0)); // Later wave is still reforming.
+    Advance(1);
+    CHECK(!CorpsBehavior[0].formation.Rejoining(0) && CorpsRallyPhase(0) == 5);
+    Advance(1);
+    CHECK(!CorpsBehavior[0].formation.Rejoining(0) && CorpsRallyPhase(0) == 0);
+    ResetBattle(ManagerMemory);
+    CHECK(!CorpsBehavior[0].formation.broken && CorpsBehavior[0].formation.rallyRemaining == 0);
+
+    Setup(100);
+    Behavior.corpsBreak = true;
+    Advance(1);
+    alignas(16) uint8_t component[0x520]{}, specs[3 * 0xF0]{}, abilities[3][0xC8]{};
+    At<void*>(component, 0x3E8) = CharacterMemory;
+    At<void*>(component, 0x508) = specs;
+    At<int>(component, 0x510) = 3;
+    At<void*>(CharacterMemory, 0x690) = component;
+    At<int>(CharacterMemory, 0xC) = 12;
+    const uint64_t* tags[] = {&HeavyAttackTag, &StanceTag, &GuardTagValue};
+    for (int i = 0; i < 3; ++i)
+    {
+        At<int>(specs + i * 0xF0, 0xC) = i + 1;
+        At<void*>(specs + i * 0xF0, 0x10) = abilities[i];
+        At<const uint64_t*>(abilities[i], 0xA8) = tags[i];
+        At<int>(abilities[i], 0xB0) = 1;
+    }
+    At<const uint64_t*>(abilities[0], 0xB8) = &AttackTag;
+    At<int>(abilities[0], 0xC0) = 1;
+    AttackAbilityTag = &AttackTag;
+    StanceAbilityTag = &StanceTag;
+    EndInfantryAbility = &FakeEndAbility;
+    OriginalActivateAbility = &FakeActivateAbility;
+    CHECK(ActivateAbility(component, 1, nullptr, nullptr, nullptr, nullptr));
+    CHECK(!SetInfantryControl(CharacterMemory, 13, true, true));
+    CHECK(SetInfantryControl(CharacterMemory, 12, true, true) && EndedAbilities == (AttackTag | StanceTag));
+    CHECK(SetInfantryControl(CharacterMemory, 12, true, false));
+    At<int>(ControllerMemory, 0x3F8) = 1;
+    BehaviorTick(ControllerMemory, 0.1f);
+    CHECK(AttackReleases == 1);
+    CHECK(SetInfantryControl(CharacterMemory, 12, false, false));
+    CHECK(!ActivateAbility(component, 1, nullptr, nullptr, nullptr, nullptr)); // Charged attack via a child tag.
+    CHECK(!ActivateAbility(component, 2, nullptr, nullptr, nullptr, nullptr));
+    CHECK(ActivateAbility(component, 3, nullptr, nullptr, nullptr, nullptr) && AbilityActivations == 2);
+    // The animation can outlast the rally's ticket rules or enter a normally exempt controller state.
+    CorpsBehavior[0].formation = {};
+    Stopped = true;
+    CHECK(!RequestAttackTicket(ControllerMemory));
+    CHECK(SetInfantryControl(CharacterMemory, 13, false, true));
+    CHECK(!ActivateAbility(component, 1, nullptr, nullptr, nullptr, nullptr));
+    At<int>(CharacterMemory, 0xC) = 13;
+    CHECK(ActivateAbility(component, 1, nullptr, nullptr, nullptr, nullptr)); // Reused actor address.
+    At<int>(CharacterMemory, 0xC) = 12;
+    CHECK(SetInfantryControl(CharacterMemory, 12, false, true));
+    CHECK(ActivateAbility(component, 1, nullptr, nullptr, nullptr, nullptr) && RequestAttackTicket(ControllerMemory));
+
+    CorpsBreakState interrupted;
+    interrupted.Advance(0, 100, 100);
+    CHECK(!interrupted.broken);
+    interrupted.Advance(0.1f, 100, 100);
+    interrupted.Advance(2, 101, 100);
+    interrupted.Advance(0.1f, 100, 100);
+    interrupted.Advance(2, 101, 100);
+    CHECK(interrupted.broken);
+    interrupted.Advance(1, 101, 100);
+    CHECK(!interrupted.broken && interrupted.Rejoining(0));
+    interrupted.Advance(0.1f, 100, 100);
+    CHECK(interrupted.Withdrawing(1) && !interrupted.Rejoining(0));
+
+    printf("PASS: %d assertions for native AI/formation callbacks, corps breaks and rallies, regroup, panic, recovery, leadership and profile families.\n", Assertions);
     return 0;
 }

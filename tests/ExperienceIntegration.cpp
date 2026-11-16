@@ -3,8 +3,9 @@
 #include "BehaviorIntegration.cpp"
 #undef main
 
-int main()
+int main(int argc, char** argv)
 {
+    CHECK(SelectBattleFixture(argc, argv));
     Setup(100);
     Experience = {};
     const auto generation = ExperienceGeneration();

@@ -29,8 +29,12 @@ local function log(message) print("[MoraleMatters] " .. message .. "\n") end
 local bridge, bridgeError = package.loadlib(binDir .. "\\MoraleMatters.asi", "MoraleMatters_Query")
 if not bridge then log("Native core could not load: " .. tostring(bridgeError)); return end
 if number("general.enabled", 1, 0, 1) == 0 then log("Disabled in INI."); return end
-if number("weaponfusion.enabled", 1, 0, 1) == 1 then dofile(modDir .. "\\Scripts\\WeaponFusion.lua")(bridge) end
+if type(LoopInGameThreadWithDelay) ~= "function" or type(ExecuteInGameThreadWithDelay) ~= "function" then
+    log("HUD controls require UE4SS game-thread timers; update UE4SS. Native combat remains active."); return
+end
 local Experience = dofile(modDir .. "\\Scripts\\Experience.lua")
+local infantryPose = dofile(modDir .. "\\Scripts\\InfantryPose.lua")
+local infantrySlump = dofile(modDir .. "\\Scripts\\InfantrySlump.lua").new(infantryPose,bridge,log)
 local experienceConfig = {
     distress=number("battlefield.distresssignals",1,0,1)==1,
     rescue=number("rescue.enabled",1,0,1)==1,
@@ -78,8 +82,13 @@ local enemyFill = {R=0.973446, G=0.111932, B=0.111932, A=1}
 local allyColor = {R=0.198069, G=0.485150, B=1, A=1}
 local ui, characterManager, hudManager, boundHUD, styleSet, fontTemplate
 local readyHUD
+local feedbackSuspended = false
 local panels, heldAssets, portraits = {}, {}, {}
-local expanded, page, running, nativeWarned = false, 0, false, false
+local expanded, page, nativeWarned = false, 0, false
+local hotkeys = {}
+local function bindKey(key, action)
+    if key then hotkeys[#hotkeys+1] = {key=key,action=action} end
+end
 local classified = false
 local errors = {}
 
@@ -219,6 +228,18 @@ local function visibility(object, state, value)
     if state.visible ~= value then object:SetVisibility(value); state.visible = value end
 end
 
+local guardTextures = {}
+local function guardTexture(name, hud)
+    if valid(guardTextures[name]) then return guardTextures[name] end
+    local library = StaticFindObject("/Script/Engine.Default__KismetRenderingLibrary")
+    assert(valid(library), "Missing texture import library")
+    local texture = library:ImportFileAsTexture2D(hud, modDir .. "\\Scripts\\Assets\\" .. name .. ".png")
+    assert(valid(texture), "Missing guard shield texture: " .. name)
+    guardTextures[name] = hold(texture)
+    return texture
+end
+local guardFeedback = dofile(modDir .. "\\Scripts\\GuardFeedback.lua").new({bridge=bridge,number=number,valid=valid,construct=construct,place=place,makeText=makeText,makeImage=makeImage,visibility=visibility,texture=guardTexture,log=log})
+
 local function findStyle()
     local gauge = boundHUD.BP_parts_gauge_enemy
     if valid(gauge) and valid(gauge.text_enemy_name) then fontTemplate = gauge.text_enemy_name.Font end
@@ -230,6 +251,7 @@ local function bindHUD()
     local hud = hudManager.Battle2DHUDWidget
 
     if not valid(boundHUD) or boundHUD:GetAddress() ~= hud:GetAddress() then
+        guardFeedback:reset()
         boundHUD, readyHUD = hud, nil
         panels, page = {}, 0
         noticeWidget,reportWidget = nil,nil
@@ -260,7 +282,7 @@ local function popup(character, rallied, healed)
         local show = function()
             if valid(hudManager) and valid(character) then hudManager:SetHeadItemNPC(character, textSetting("support.healtext", "Health restored"), "+" .. math.floor(healed + 0.5)) end
         end
-        if rallied then ExecuteWithDelay(600, function() ExecuteInGameThread(show) end) else show() end
+        if rallied then ExecuteInGameThreadWithDelay(600, show) else show() end
     end
 end
 
@@ -298,35 +320,38 @@ local function scanCharacters()
 end
 
 local function formations(players, liveHealth)
-    local count = bridge(7)
+    local count, corpsCount = bridge(7)
     local result, groups = {}, {}
     for id = 0, (count or 0) - 1 do
         local corps, unit, rank, side, alive, hp, maximum, x,y,z, soldiers, casualties, breaks, phase = bridge(2, id)
-        if corps and corps >= 0 and side >= 0 and side < 2 then
-            groups[id] = {id=id,corps=corps,unit=unit,rank=rank,side=side,alive=alive==1,health=liveHealth and liveHealth[id] or (maximum and maximum>0 and hp/maximum or 1),x=x,y=y,z=z,casualties=casualties or 0,breaks=breaks or 0}
-        end
-        if corps and corps >= 0 and alive == 1 and side >= 0 and side < 2 then
+        if corps and corps >= 0 and corps < corpsCount and side >= 0 and side < 2 then
+            groups[id] = {id=id,corps=corps,unit=unit,rank=rank,side=side,alive=alive==1,health=liveHealth and liveHealth[id] or (maximum and maximum>0 and hp/maximum or 1),x=x,y=y,z=z,casualties=casualties or 0,breaks=breaks or 0,phase=phase}
             local row = result[corps]
-            if not row then
-                local leader, corpsSide, base, effective, bonus, remaining, reason, amount, reasonAge, _, proximity = bridge(3, corps)
-                row = {id=corps, leader=leader, side=corpsSide, base=base, morale=effective, bonus=bonus, remaining=remaining or 0,proximity=proximity or 0,reason=reason or 0,reasonAge=reasonAge or math.huge,members={}, distance=math.huge}
-                result[corps] = row
-            end
-            if id == row.leader then row.unit, row.leaderAlive = unit, true
-            elseif (rank >= 2 and rank <= 5) or isViceGeneral(unit) then
-                row.members[#row.members + 1] = {id=id,unit=unit,rank=rank,health=groups[id].health}
-            else
-                if not row.groupLeaders then row.groupLeaders = {unit=unit,count=0} end
-                row.groupLeaders.count = row.groupLeaders.count + 1
-            end
-            if rank >= 2 and rank <= 5 then
-                if not row.wounded or groups[id].health < row.wounded.health then row.wounded = groups[id] end
-                for _, player in ipairs(players) do
-                    local dx,dy = x-player.X, y-player.Y
-                    row.distance = math.min(row.distance, dx*dx+dy*dy)
+            if alive == 1 and not row then
+                local leader, corpsSide, base, effective, bonus, remaining, reason, amount, reasonAge, _, proximity, corpsPhase = bridge(3, corps)
+                if corpsSide == side then
+                    row = {id=corps, leader=leader, side=corpsSide, base=base, morale=effective, bonus=bonus, remaining=remaining or 0,proximity=proximity or 0,reason=reason or 0,reasonAge=reasonAge or math.huge,members={}, distance=math.huge}
+                    if corpsPhase and corpsPhase > 0 then row.phase = corpsPhase end
+                    result[corps] = row
                 end
             end
-            if phase and phase > 0 then row.phase = math.min(row.phase or phase,phase) end
+            if alive == 1 and row and row.side == side then
+                if id == row.leader then row.unit, row.leaderAlive = unit, true
+                elseif (rank >= 2 and rank <= 5) or isViceGeneral(unit) then
+                    row.members[#row.members + 1] = {id=id,unit=unit,rank=rank,health=groups[id].health}
+                else
+                    if not row.groupLeaders then row.groupLeaders = {unit=unit,count=0} end
+                    row.groupLeaders.count = row.groupLeaders.count + 1
+                end
+                if rank >= 2 and rank <= 5 then
+                    if not row.wounded or groups[id].health < row.wounded.health then row.wounded = groups[id] end
+                    for _, player in ipairs(players) do
+                        local dx,dy = x-player.X, y-player.Y
+                        row.distance = math.min(row.distance, dx*dx+dy*dy)
+                    end
+                end
+                if phase and phase > 0 and (not row.phase or row.phase < 4) then row.phase = math.min(row.phase or phase, phase) end
+            end
         end
     end
     local list = {}
@@ -580,7 +605,8 @@ local function updateHUD(players, byId, list)
         local target = hudManager:GetEnemyGaugeUnit(characterManager)
         if valid(target) then
             local _,_,corps = bridge(5,target:GetAddress())
-            shown[2] = byId[corps]
+            local row = byId[corps]
+            if row and row.side == 1 then shown[2] = row end
         end
         if not shown[2] then for _,row in ipairs(list) do if row.side==1 and row.distance < 3000*3000 then shown[2]=row; break end end end
     end
@@ -599,30 +625,54 @@ local function updateHUD(players, byId, list)
     end
 end
 
-local toggleKey = textSetting("hud.allcorpskey", "F7")
-if Key[toggleKey] then RegisterKeyBind(Key[toggleKey], function() expanded = not expanded; page = 0 end) end
-RegisterKeyBind(Key.PAGE_DOWN, function() if expanded then page = page+1 end end)
-RegisterKeyBind(Key.PAGE_UP, function() if expanded then page = math.max(0,page-1) end end)
-local reportKey = textSetting("report.key","F8")
-if Key[reportKey] then RegisterKeyBind(Key[reportKey],function() reportShown=not reportShown end) end
+-- Bootstrap once, then retain the timer callbacks on the game thread. Async
+-- Lua coroutines share this state's registry/GC and must not run beside the HUD.
+ExecuteInGameThread(function()
+    local attachBodyguardFusion, updateBodyguardFusion
+    guard("Bodyguard Weapon Fusion", function()
+        attachBodyguardFusion, updateBodyguardFusion = dofile(modDir .. "\\Scripts\\WeaponFusion.lua")(bridge)
+    end)
+    local toggleKey = textSetting("hud.allcorpskey", "F7")
+    bindKey(Key[toggleKey], function() expanded = not expanded; page = 0 end)
+    bindKey(Key.PAGE_DOWN, function() if expanded then page = page+1 end end)
+    bindKey(Key.PAGE_UP, function() if expanded then page = math.max(0,page-1) end end)
+    local reportKey = textSetting("report.key","F8")
+    bindKey(Key[reportKey],function() reportShown=not reportShown end)
+    LoopInGameThreadWithDelay(8, function()
+        guard("Infantry slump", infantrySlump.update)
+    end)
+    LoopInGameThreadWithDelay(50, function()
+        if updateBodyguardFusion then guard("Bodyguard Weapon Fusion", updateBodyguardFusion) end
+        guard("Hotkeys", function()
+            -- Read each key once so two features can share a configured key.
+            local pressed = {}
+            for _, binding in ipairs(hotkeys) do
+                if pressed[binding.key] == nil then pressed[binding.key] = bridge(17,binding.key)==1 end
+                if pressed[binding.key] then binding.action() end
+            end
+        end)
+        guard("Guard feedback", function()
+            if feedbackSuspended or bridge(0)~=1 or not valid(boundHUD) then guardFeedback:hide(); return end
+            guardFeedback:update(boundHUD.canvas_hud,boundHUD)
+        end)
+    end)
 
-LoopAsync(updateMs, function()
-    if running then return false end
-    running = true
-    ExecuteInGameThread(function()
-        local ok = guard("Update", function()
+    LoopInGameThreadWithDelay(updateMs, function()
+        guard("Update", function()
             local status = bridge(0)
             if status ~= 1 then
                 if status and status ~= 0 and not nativeWarned then log("Native core inactive (status "..tostring(status).."); gameplay and HUD updates skipped."); nativeWarned=true end
                 return
             end
+            if attachBodyguardFusion then guard("Bodyguard Weapon Fusion", attachBodyguardFusion) end
             ui = ui or StaticFindObject("/Script/Refine.Default__UIFunction")
             if not valid(ui) then return end
-            if updateResults() then return end
+            feedbackSuspended = updateResults()
+            if feedbackSuspended then guardFeedback:hide(); infantrySlump.clear(); return end
             if not valid(characterManager) then characterManager = FindFirstOf("CharacterManager") end
             if not valid(ui) or not valid(characterManager) then return end
             guard("Classification", classify)
-            if not bindHUD() then return end
+            if not bindHUD() then infantrySlump.clear(); return end
             local now,generation = bridge(12)
             if generation ~= experienceGeneration then
                 experienceGeneration=generation
@@ -634,6 +684,7 @@ LoopAsync(updateMs, function()
             local clockStarted = profile and os.clock() or 0
             local players,support,liveHealth = scanCharacters()
             local byId,list,groups = formations(players,liveHealth)
+            infantrySlump.observe(characterManager,players,groups,generation)
             local completions = experience:update(now or 0,byId,groups,players,support)
             for _,entry in ipairs(completions) do experience:complete(entry,bridge(13,entry.officer) or -1) end
             guard("HUD", function() updateHUD(players,byId,list); updateNotice(groups,players) end)
@@ -645,8 +696,6 @@ LoopAsync(updateMs, function()
                 if samples%20 == 0 then log(string.format("PROFILE updates=%d mean=%.3fms peak=%.3fms clockMean=%.3fms clockPeak=%.3fms",samples,totalTime/samples,peakTime,totalClock/samples,peakClock)) end
             end
         end)
-        running = false
     end)
-    return false
 end)
-log("Loaded. F7 toggles all-corps panels; Page Up/Down changes pages; F8 toggles the battle report.")
+log("Loaded with game-thread timers and polled hotkeys. F7 toggles all-corps panels; Page Up/Down changes pages; F8 toggles the battle report.")

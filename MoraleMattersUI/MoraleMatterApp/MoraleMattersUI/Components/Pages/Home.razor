@@ -308,6 +308,8 @@
                                     <div class="wa-stack wa-gap-xs">
                                         <RoarSwitch @bind-Value="SettingForm.BehaviorLocalRegroup" Disabled="@(!SettingForm.BehaviorEnabled)" Hint="Ordinary infantry regroup at low morale or after defeat shock. Named officers keep their strategic orders.">Infantry regrouping</RoarSwitch>
                                         <ValidationMessage For="() => SettingForm.BehaviorLocalRegroup" />
+                                        <RoarSwitch @bind-Value="SettingForm.BehaviorCorpsBreak" Disabled="@(!SettingForm.BehaviorEnabled || !SettingForm.BehaviorLocalRegroup)" Hint="Ordinary troops fall back or defend at the Very Low combat morale anchor and rally after holding the Low anchor for three seconds.">Corps break and rally</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.BehaviorCorpsBreak" />
                                     </div>
                                     <div class="wa-grid wa-align-items-start" style="--min-column-size: 10rem;">
                                         <div class="wa-stack wa-gap-xs">
@@ -436,6 +438,56 @@
                                     </div>
                                 </div>
                                 <RoarDivider />
+                                <h3 class="wa-heading-s">Guard pressure</h3>
+                                <p>Blocked player melee attacks weaken enemy guards. Charge attacks add more pressure. A guard break creates a short opening and can make nearby infantry hesitate. High morale improves recovery and shortens hesitation.</p>
+                                <RoarSwitch @bind-Value="SettingForm.GuardPressureEnabled" Hint="Independent of morale-driven behavior and damage scaling. Player and allied guards keep their native rules.">Guard pressure and openings</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.GuardPressureEnabled" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.GuardPressureShowPressureBar" Hint="Show gold fortitude shields above up to three pressured enemies. Shields drain as guard pressure builds.">Guard shields</RoarSwitch>
+                                    <RoarSwitch @bind-Value="SettingForm.GuardPressureShowBreakIndicator" Hint="Flash and split the shields with a larger GUARD BROKEN message.">Guard-break indicator</RoarSwitch>
+                                    <RoarSwitch @bind-Value="SettingForm.GuardPressureBreakSound" Hint="Play distinct Origins clip samples for blocked hits and full breaks, with sound priority and rate limits. Follows Windows audio volume.">Guard-hit and break sounds</RoarSwitch>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureIndicatorSeconds" Label="Break indicator duration (s)" min="0.3" max="3" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureIndicatorSeconds" />
+                                    </div>
+                                </div>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureNormalPressure" Label="Pressure per blocked normal hit" min="0.1" max="20" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureNormalPressure" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureChargePressure" Label="Pressure per blocked charge hit" min="0.1" max="40" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureChargePressure" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureSoldierThreshold" Label="Ordinary soldier break threshold" min="1" max="100" step="1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureSoldierThreshold" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureEliteThreshold" Label="Elite troop break threshold" min="1" max="100" step="1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureEliteThreshold" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureOfficerThreshold" Label="Named officer break threshold" min="1" max="100" step="1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureOfficerThreshold" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureRecoveryDelaySeconds" Label="Recovery delay (s)" Hint="Time without blocking before pressure starts to recover." min="0" max="10" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureRecoveryDelaySeconds" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureRecoveryPerSecond" Label="Pressure recovery per second" Hint="Half this rate at very low morale; 1.5 times at very high morale." min="0" max="20" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureRecoveryPerSecond" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureOpeningSeconds" Label="Opening after a break (s)" Hint="The enemy cannot block ordinary player melee hits during this window." min="0.1" max="3" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureOpeningSeconds" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureBreakCooldownSeconds" Label="Break cooldown after opening (s)" min="0.5" max="20" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureBreakCooldownSeconds" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarSwitch @bind-Value="SettingForm.GuardPressureLocalDisruption" Hint="A limited number of nearby ordinary melee troops hesitate. Named officers and scripted orders are excluded.">Local disruption after a break</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.GuardPressureLocalDisruption" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureDisruptionRadiusMetres" Label="Disruption radius (m)" min="0.5" max="10" step="0.5" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureDisruptionRadiusMetres" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureDisruptionSeconds" Label="Base hesitation (s)" Hint="Longer at low morale and shorter at high morale." min="0.1" max="3" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureDisruptionSeconds" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureDisruptionCooldownSeconds" Label="Disruption cooldown (s)" Hint="Limits repeated pulses from a group and repeated hesitation of a soldier." min="1" max="30" step="0.5" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureDisruptionCooldownSeconds" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureDisruptionMaxTargets" Label="Maximum nearby troops" min="0" max="16" step="1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureDisruptionMaxTargets" />
+                                    </div>
+                                </div>
+                                <RoarDivider />
                                 <h3 class="wa-heading-s">Enemy corps proximity</h3>
                                 <RoarSwitch @bind-Value="SettingForm.EnemyProximityEnabled" Hint="Give temporary morale to enemy corps whose living corps leaders are close to one another.">Enemy corps proximity support</RoarSwitch>
                                 <ValidationMessage For="() => SettingForm.EnemyProximityEnabled" />
@@ -457,7 +509,7 @@
                                     <RoarIcon Name="recycle" />
                                     Weapon fusion
                                 </div>
-                                <div class="wa-body-s">Improved fusion for officer and bodyguard weapons. Press F6 in the game's base-weapon selection screen to switch inventories.</div>
+                                <div class="wa-body-s">Applies the same fusion rules to officer and bodyguard weapons. Select Weapon Fusion under Bodyguard in Equipment at Camp or before a stage.</div>
                             </div>
                             <div class="wa-stack wa-gap-xs">
                                 <RoarSwitch @bind-Value="SettingForm.WeaponFusionEnabled">Enable improved weapon fusion mechanics.</RoarSwitch>

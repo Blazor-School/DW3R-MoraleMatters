@@ -88,6 +88,59 @@ public class ModSettingForm : IValidatableObject
     [Range(0.0, 898.0)]
     public double EnemyProximityMoraleBonus { get; set; } = 100;
 
+    // [GuardPressure]
+    public bool GuardPressureEnabled { get; set; } = true;
+
+    [Range(0.1, 20.0)]
+    public double GuardPressureNormalPressure { get; set; } = 1;
+
+    [Range(0.1, 40.0)]
+    public double GuardPressureChargePressure { get; set; } = 3;
+
+    [Range(1.0, 100.0)]
+    public double GuardPressureSoldierThreshold { get; set; } = 6;
+
+    [Range(1.0, 100.0)]
+    public double GuardPressureEliteThreshold { get; set; } = 9;
+
+    [Range(1.0, 100.0)]
+    public double GuardPressureOfficerThreshold { get; set; } = 12;
+
+    [Range(0.0, 10.0)]
+    public double GuardPressureRecoveryDelaySeconds { get; set; } = 2;
+
+    [Range(0.0, 20.0)]
+    public double GuardPressureRecoveryPerSecond { get; set; } = 2;
+
+    [Range(0.1, 3.0)]
+    public double GuardPressureOpeningSeconds { get; set; } = 0.9;
+
+    [Range(0.5, 20.0)]
+    public double GuardPressureBreakCooldownSeconds { get; set; } = 3;
+
+    public bool GuardPressureLocalDisruption { get; set; } = true;
+
+    [Range(0.5, 10.0)]
+    public double GuardPressureDisruptionRadiusMetres { get; set; } = 4;
+
+    [Range(0.1, 3.0)]
+    public double GuardPressureDisruptionSeconds { get; set; } = 0.8;
+
+    [Range(1.0, 30.0)]
+    public double GuardPressureDisruptionCooldownSeconds { get; set; } = 4;
+
+    [Range(0, 16)]
+    public int GuardPressureDisruptionMaxTargets { get; set; } = 6;
+
+    public bool GuardPressureShowPressureBar { get; set; } = true;
+
+    public bool GuardPressureShowBreakIndicator { get; set; } = true;
+
+    public bool GuardPressureBreakSound { get; set; } = true;
+
+    [Range(0.3, 3.0)]
+    public double GuardPressureIndicatorSeconds { get; set; } = 1.2;
+
     // [Behavior]
     public bool BehaviorEnabled { get; set; } = true;
 
@@ -108,6 +161,8 @@ public class ModSettingForm : IValidatableObject
     public double BehaviorHighMoraleFormationScale { get; set; } = 0.65;
 
     public bool BehaviorLocalRegroup { get; set; } = true;
+
+    public bool BehaviorCorpsBreak { get; set; } = true;
 
     [Range(0.0, 50.0)]
     public double BehaviorRegroupBelowPercent { get; set; } = 25;

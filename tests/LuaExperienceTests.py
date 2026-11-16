@@ -132,7 +132,7 @@ clock,generation,resultActive=0,0,false
 local address=0
 function widget(kind)
  address=address+1
- local w={address=address,kind=kind,Font={},ReferencedObjects={},children={}}
+ local w={address=address,kind=kind,Font={},ReferencedObjects={},children={},RenderTransform={Translation={X=0,Y=0}}}
  function w:IsValid() return true end
  function w:GetAddress() return self.address end
  function w:IsA(class) return self.kind==class.kind end
@@ -146,14 +146,27 @@ function widget(kind)
  function w:SetSize(s) self.size=s end
  function w:SetText(t) self.text=t;self.writes=(self.writes or 0)+1 end
  function w:SetFont(f) self.Font=f end
+ function w:SetJustification(value) self.justification=value end
+ function w:GetOwningPlayer() if not classes.playerController then classes.playerController=widget('PlayerController') end;return classes.playerController end
  function w:SetClipping(c) self.clipping=c end
  function w:SetTextOverflowPolicy(p) self.overflow=p end
- function w:SetBrushFromTexture(t) self.texture=t end
+ function w:SetBrushFromTexture(t,match) assert(match==false,'Image:SetBrushFromTexture requires bMatchSize');self.texture=t end
+ function w:SetRenderScale(value) self.scale=value end
+ function w:SetRenderTransformPivot(value) self.pivot=value end
+ function w:SetRenderOpacity(value) self.opacity=value end
+ function w:SetShadowOffset(value) self.shadowOffset=value end
+ function w:SetShadowColorAndOpacity(value) self.shadowColor=value end
  function w:RemoveFromParent() self.removed=true end
  function w:GetParent() return self.parent end
+ function w:GetFullName() return 'fixture.'..self.kind end
+ function w:SetRenderTranslation(value) self.RenderTransform.Translation=value end
+ function w:GetPosition() return self.position or {X=0,Y=0} end
+ function w:GetSize() return self.size or {X=200,Y=12} end
+ function w:GetAlignment() return self.alignment or {X=0,Y=0} end
+ function w:GetAnchors() return self.anchors or {Minimum={X=0,Y=0},Maximum={X=0,Y=0}} end
  function w:AddChildToCanvas(child)
   assert(self.kind=='CanvasPanel')
-  local slot=widget('slot');child.Slot=slot;child.parent=self;self.children[#self.children+1]=child;return slot
+  local slot=widget('CanvasPanelSlot');child.Slot=slot;child.parent=self;self.children[#self.children+1]=child;return slot
  end
  widgets[#widgets+1]=w
  return w
@@ -168,6 +181,10 @@ function StaticFindObject(path)
  function w:GetFaceStillPath(unit) return stringValue('face'..unit) end
  function w:GetDataTableRowNames() end
  function w:GetDataTableColumnAsString() return {} end
+ function w:ProjectWorldLocationToWidgetPosition(_,position,point) point.X=position.X;point.Y=position.Y;return true end
+ function w:GetViewportSize() return {X=1920,Y=1080} end
+ function w:GetViewportScale() return 1 end
+ function w:ImportFileAsTexture2D(_,path) assert(path:find('Scripts\\Assets\\shield-',1,true));return widget('texture') end
  return w
 end
 function StaticConstructObject(class) return widget(class.kind) end
@@ -175,36 +192,73 @@ function LoadAsset() return widget('asset') end
 function FText(value) return value end
 function FName(value) return value end
 Key={F7='F7',F8='F8',PAGE_DOWN='DOWN',PAGE_UP='UP'}
-function RegisterKeyBind(key,callback) bindings[key]=callback end
-function LoopAsync(_,callback) callbacks.tick=callback end
-function ExecuteInGameThread(callback) callback() end
-function ExecuteWithDelay(_,callback) callback() end
+bootstrapCalls=0
+local inGameThread=false
+local function onGameThread(callback)
+ assert(not inGameThread,'Fixture timer reentered')
+ inGameThread=true;callback();inGameThread=false
+end
+function RegisterKeyBind() error('Off-thread hotkeys must not be installed') end
+function LoopAsync() error('Async Lua polling must not be installed') end
+function ExecuteWithDelay() error('Async Lua delays must not be installed') end
+function LoopInGameThreadWithDelay(interval,callback)
+ assert(inGameThread,'Timers must be registered on the game thread')
+ callbacks.intervals=callbacks.intervals or {}
+ callbacks.intervals[interval]=function() onGameThread(callback) end
+ callbacks.tick=callbacks.intervals[interval]
+end
+function ExecuteInGameThread(callback)
+ bootstrapCalls=bootstrapCalls+1
+ assert(bootstrapCalls==1,'Recurring game-thread scheduling must not be used')
+ onGameThread(callback)
+end
+function ExecuteInGameThreadWithDelay(_,callback) assert(inGameThread);callbacks.heal=callback end
+keyPresses,keyReads={},{}
+bindings=setmetatable({}, {__index=function(_,key) return function() keyPresses[key]=true;callbacks.intervals[50]() end end})
 local hud=widget('hud');hud.canvas_hud=widget('CanvasPanel')
 hud.BP_parts_gauge_enemy=widget('gauge');hud.BP_parts_gauge_enemy.text_enemy_name=widget('TextBlock')
 local battle=widget('BattleHUDManager');battle.Battle2DHUDWidget=hud
+local headCanvas,headHP,headGauge,headComponent,headActor=widget('CanvasPanel'),widget('Image'),widget('GaugeHeadWidget'),widget('WidgetComponent'),widget('Actor')
+headCanvas:AddChildToCanvas(headHP)
+headGauge.gauge_head_base=headHP;headGauge.text_enemy_name=widget('TextBlock');headGauge.text_soldier_name=widget('TextBlock')
+function headComponent:IsVisible() return true end
+function headComponent:GetUserWidgetObject() return headGauge end
+function headActor:GetComponentByClass(class) assert(class.kind=='WidgetComponent');return headComponent end
+battle.NPCHeadWidgetInfo={ForEach=function(_,callback)
+ callback(1,{get=function() return {Actors={headActor},UnitID={ForEach=function(_,each) each(1,{get=function() return 1001 end}) end}} end})
+end}
 battle.ItemHeadWidgetNPC={ForEach=function() end}
 function battle:SetHeadItemNPC() end
-function battle:GetEnemyGaugeUnit() return nil end
+function battle:GetEnemyGaugeUnit() return enemyTarget end
 local characters=widget('CharacterManager');characters.m_arpCharacterList={}
 local manager=widget('AlgoManager')
 local instance=widget('GameInstance')
+local sound=widget('SoundManager')
+guardSoundCalls=0
+function sound:PlayRepelSE(spatial,position) assert(spatial and position.Z==10);guardSoundCalls=guardSoundCalls+1 end
 local result=widget('ResultHUDManager');result.CommonWidget=widget('UserWidget')
 result.CommonWidget.WidgetTree=widget('WidgetTree');result.CommonWidget.WidgetTree.RootWidget=widget('CanvasPanel')
 function FindFirstOf(name)
- return ({BattleHUDManager=battle,CharacterManager=characters,AlgoManager=manager,GameInstance=instance,ResultHUDManager=resultActive and result or nil})[name]
+ return ({BattleHUDManager=battle,CharacterManager=characters,AlgoManager=manager,GameInstance=instance,SoundManager=sound,ResultHUDManager=resultActive and result or nil})[name]
 end
 nativeGroups={}
 for id=0,4 do nativeGroups[id]={id<3 and 0 or 1,100+id,id==0 and 3 or 6,id<3 and 0 or 1,1,100,100,id*100,0,0,8,0,0,0} end
 local function bridge(op,id)
  if op==0 then return 1 end
- if op==1 then generation=generation+1;clock=0;return end
- if op==2 then return table.unpack(nativeGroups[id]) end
- if op==3 then return id==0 and 0 or 3,id,400,500,100,120,8,100,1,clock end
+ if op==1 then generation=generation+1;clock=0;guardRows={};return end
+ if op==2 then return table.unpack(nativeGroups[id or 0]) end
+ if op==3 and not missingCorps then return id==0 and 0 or 3,id,400,500,100,120,8,100,1,clock end
+ if op==3 and id==0 then return 0,0,400,500,100,120,8,100,1,clock end
+ if op==5 and enemyTarget then return 3,-1,targetCorps,targetCorps,1,1,1,1 end
  if op==7 then return groupCount or 5,2 end
  if op==8 then return 0 end
  if op==10 then return 0 end
  if op==12 then return clock,generation end
  if op==13 then return 10 end
+ if op==17 then keyReads[id]=(keyReads[id] or 0)+1;local pressed=keyPresses[id];keyPresses[id]=nil;return pressed and 1 or 0 end
+ if op==18 then return 0 end
+ if op==15 then return #(guardRows or {}),generation,clock end
+ if op==16 then local row=guardRows[id];row[13]=row[13] or 0;row[14]=1001;return table.unpack(row) end
 end
 package.loadlib=function() return bridge end
 function tick(time) clock=time;callbacks.tick() end
@@ -267,6 +321,108 @@ newBattle();tick(0);tick(1)
 assert(generation==2,'New battle did not reset the native ledger')
 return 'Passed complete main.lua HUD, cached setters, expanded view, report key, upper-right results placement/toggling/canvas replacement and next-battle lifecycle fixtures.'
 '''))
+
+
+print(lua.execute(r'''
+local function commandPanels()
+    local allied, enemy = 0, 0
+    local canvas = FindFirstOf('BattleHUDManager').Battle2DHUDWidget.canvas_hud
+    for _, w in ipairs(widgets) do
+        if w.parent and w.parent.parent == canvas and w.parent.visible ~= 1 then
+            if w.text == 'Officer 100' then allied = allied + 1 end
+            if w.text == 'Officer 103' then enemy = enemy + 1 end
+        end
+    end
+    return allied, enemy
+end
+newBattle()
+bindings.F7()
+enemyTarget = widget('EnemyTarget')
+enemyTarget.address = 1003
+targetCorps = 1
+nativeGroups[4][1] = 18
+tick(0)
+local allied, enemy = commandPanels()
+assert(allied == 1 and enemy == 1, 'An invalid corps reference stopped valid allied and enemy panels')
+missingCorps = true
+tick(1)
+allied, enemy = commandPanels()
+assert(allied == 1 and enemy == 0, 'A missing native corps left a stale enemy panel')
+missingCorps, targetCorps = false, 0
+tick(2)
+allied, enemy = commandPanels()
+assert(allied == 1 and enemy == 0, 'The enemy gauge resolved to a duplicate allied panel')
+nativeGroups[4][1] = 1
+enemyTarget = nil
+return 'Passed malformed native corps and enemy HUD selection regressions.'
+'''))
+
+print(lua.execute(r'''
+assert(callbacks.intervals[50] and callbacks.intervals[500],'Guard feedback has no independent fast update')
+guardRows={{1,1,0,300,200,10,3,6,0,0.1,0,0}}
+callbacks.intervals[50]()
+local label
+for _,w in ipairs(widgets) do if w.text=='GUARD' then label=w end end
+assert(label and label.parent.visible==4,'Real main.lua did not display pressure feedback')
+guardRows={{1,1,0,300,200,10,0,6,0.9,0,1.2,1}}
+callbacks.intervals[50]()
+assert(label.text=='GUARD BROKEN' and guardSoundCalls==1)
+callbacks.intervals[50]();assert(guardSoundCalls==1,'Fast loop repeated the sound')
+resultOn();tick(2);callbacks.intervals[50]()
+assert(label.parent.visible==1,'Pressure meter remained on results screen')
+newBattle();tick(0);tick(1)
+assert(label.parent.removed,'New battle retained pressure widgets from old HUD')
+guardRows={{2,1,0,300,200,10,0,6,0.9,0,1.2,1}}
+callbacks.intervals[50]()
+assert(guardSoundCalls==2,'New battle inherited the old sound sequence')
+return 'Passed real main.lua guard feedback: fast update, pressure fill, break text/audio, deduplication, results hiding and next-battle reset.'
+'''))
+
+feedback_only = LuaRuntime(unpack_returned_tuples=True)
+feedback_only.execute(harness)
+feedback_only.globals().iniText = '[HUD]\nEnabled=0\n'
+feedback_only.execute('local source,name=...;assert(load(source,name))()', source, '@' + str(root / 'Scripts' / 'main.lua'))
+print(feedback_only.execute(r'''
+tick(0);tick(1)
+guardRows={{1,1,0,300,200,10,3,6,0,0,0,0}}
+callbacks.intervals[50]()
+local meter,corps
+for _,w in ipairs(widgets) do if w.text=='GUARD' then meter=w end;if w.text=='56%' then corps=w end end
+assert(meter and meter.parent.visible==4 and not corps,'Pressure feedback depends on the corps HUD switch')
+return 'Passed independent pressure feedback with the corps HUD disabled.'
+'''))
+
+stress = LuaRuntime(unpack_returned_tuples=True)
+stress.execute(harness)
+stress.execute('local source,name=...;assert(load(source,name))()', source, '@' + str(root / 'Scripts' / 'main.lua'))
+print(stress.execute(r'''
+tick(0);tick(1)
+assert(bootstrapCalls==1 and not callbacks.intervals[250],'Fusion background polling remains')
+local layout=StaticFindObject('/Script/UMG.Default__WidgetLayoutLibrary')
+local project=layout.ProjectWorldLocationToWidgetPosition
+layout.ProjectWorldLocationToWidgetPosition=function() error('fixture projection failure') end
+guardRows={{1,1,0,300,200,10,3,6,0,0,0,0}}
+callbacks.intervals[50]() -- A callback error must not strand a busy flag or remove the timer.
+layout.ProjectWorldLocationToWidgetPosition=project
+for i=1,10000 do
+ guardRows={{i,1,0,300+i%30,200,10,i%6,6,0,0,i%17==0 and 1.2 or 0,math.floor(i/17)}}
+ callbacks.intervals[50]()
+ if i%10==0 then tick(i/20) end
+ if i%100==0 then collectgarbage('collect') end
+end
+local label
+for _,w in ipairs(widgets) do if w.text=='GUARD' then label=w end end
+assert(label and label.parent.visible==4,'Timer failed to recover after projection error/GC stress')
+assert(bootstrapCalls==1 and not keyReads.F6,'Recurring scheduling or F6 listener returned')
+return 'Passed 10,000 retained game-thread feedback callbacks with forced Lua GC, HUD updates and callback-error recovery; no async loops or F6 polling.'
+'''))
+
+legacy = LuaRuntime(unpack_returned_tuples=True)
+legacy.execute(harness)
+legacy.execute('LoopInGameThreadWithDelay=nil')
+legacy.execute('local source,name=...;assert(load(source,name))()', source, '@' + str(root / 'Scripts' / 'main.lua'))
+assert legacy.globals().bootstrapCalls == 0
+print('Passed fail-closed behavior on UE4SS without game-thread timers; no unsafe async fallback.')
 
 for width, portrait, commander, details in ((220,16,16,1),(220,64,64,1),(300,30,24,1),(900,64,64,1),(300,30,24,0)):
     layout = LuaRuntime(unpack_returned_tuples=True)
@@ -389,109 +545,116 @@ assert(panel.icons[1].healthSlot.size.X==0 and panel.members==signature)
 ''')
 print('Passed five full-HUD layout cases: individual officers/all Vice General variants, one unnamed count, casualties/filtering, widget reuse, live HP, 16-64px configured portraits, narrow panels, ellipsis, dynamic height and trend caching.')
 
-# Native-menu entry point: execute the real F6 binding and hint updater with
-# reflected widget/native status fixtures, including hidden and disabled menus.
 fusion_lua = LuaRuntime(unpack_returned_tuples=True)
-fusion_lua.execute(r'''
-Key={F6='F6'}
-local checks=0
-now,logs=0,{}
-local output=print
-function print(message) logs[#logs+1]=message;output(message) end
-function check(value) checks=checks+1;assert(value,'fusion menu assertion '..checks) end
+fusion_lua.globals().makeFusion = fusion_lua.execute((root / 'Scripts' / 'WeaponFusion.lua').read_text(encoding='utf-8'))
+print(fusion_lua.execute(r'''
+local assertions = 0
+local function check(value)
+    assertions = assertions + 1
+    assert(value, "Bodyguard fusion menu assertion " .. assertions)
+end
+local function widget(address)
+    local object = {address=address, visible=true, inViewport=true, valid=true, navigation={}}
+    function object:IsValid() return self.valid end
+    function object:IsVisible() return self.visible end
+    function object:IsInViewport() return self.inViewport end
+    function object:GetAddress() return self.address end
+    function object:SetNavigationRuleExplicit(direction, target) self.navigation[direction] = target end
+    function object:SetVisibility(value) self.Visibility = value end
+    function object:GetClass() return "equipment row" end
+    return object
+end
+local function text(initial)
+    local label = widget()
+    label.value = initial
+    function label:GetText() return {ToString=function() return self.value end} end
+    function label:SetText(value) self.value = value end
+    return label
+end
+local managers = {}
+local created, removed, bound = 0, 0, 0
+local accepted, nativeActive, available, mode, stock = true, true, true, 1, 0
+local rows = {}
 function FText(value) return value end
-function RegisterKeyBind(_,callback) pressF6=callback end
-function LoopAsync(_,callback) tick=callback end
-function ExecuteInGameThread(callback) callback() end
-local function widget()
- local w={valid=true,visible=true}
- function w:IsValid() return self.valid end
- function w:IsVisible() return self.visible end
- function w:IsInViewport() return self.inViewport~=false end
- function w:GetAddress() return 123 end
- function w:SetVisibility(value) self.visibility=value end
- function w:SetText(value) self.text=value end
- return w
+function StaticFindObject(path)
+    check(path == "/Script/UMG.Default__WidgetBlueprintLibrary")
+    return {Create=function(_, manager, class, controller)
+        check(class == "equipment row" and controller == manager.CommonWidget:GetOwningPlayer())
+        created = created + 1
+        local row = widget(100 + created)
+        row.text_list = text()
+        function row:RemoveFromParent() removed = removed + 1 end
+        rows[manager.address] = row
+        return row
+    end}
 end
-label,grid,portrait,selector,manager=widget(),widget(),widget(),widget(),widget()
-selector.BP_parts_abandonment_chara_list=widget()
-selector.BP_parts_abandonment_chara_list.text_equipable=label
-selector.BP_parts_abandonment_chara_list.chara_List=grid
-selector.chara_full_xxx=portrait
-manager.WeaponCustomSelectWidget=selector
-function FindFirstOf(name) check(name=='BriefingEquipManager');return manager end
-status,mode,queries,toggles=1,1,0,0
-function bridge(op,address,toggle)
- if op==0 then return status end
- if op==10 then return now end
- check(op==14 and address==123)
- queries=queries+1
- if toggle==1 then
-  toggles=toggles+1
-  if mode==1 then mode=2 elseif mode==2 then mode=1 end
- end
- return mode
+function FindAllOf(class)
+    check(class == "BriefingEquipManager")
+    return managers
 end
-function countChecks() return checks end
-''')
-fusion_lua.execute((root / 'Scripts' / 'WeaponFusion.lua').read_text(encoding='utf-8'))(fusion_lua.globals().bridge)
-fusion_lua.execute(r'''
-tick();check(label.text=='Officer weapons | F6: Bodyguards' and grid.visibility==0)
-pressF6();check(mode==2 and grid.visibility==1 and portrait.visibility==1)
-check(label.text=='Bodyguard weapons | F6: Officers' and toggles==1)
-mode=4;pressF6();check(mode==4 and label.text=='Bodyguard weapons | Back, then F6: Officers')
-mode=2;pressF6();check(mode==1 and grid.visibility==0 and portrait.visibility==0)
-local before=queries
-selector.visible=false;pressF6();tick();check(queries==before)
-selector.visible=true;status=0;pressF6();tick();check(queries==before)
-status=1;selector.inViewport=false;pressF6();check(mode==2) -- Hosted pickers are not direct viewport widgets.
-selector.inViewport=true;mode=1
-local immediate=ExecuteInGameThread
-function ExecuteInGameThread(callback) queued=callback end
-tick();pressF6();check(mode==1)
-queued();check(mode==2) -- A queued polling update cannot swallow F6.
-ExecuteInGameThread=immediate
-before=queries;mode=0;pressF6();check(mode==0)
--- A missed refresh stays parked until F6 supersedes it.
-local callbacks={}
-function ExecuteInGameThread(callback) callbacks[#callbacks+1]=callback end
-mode=1;before=toggles;tick()
-now=1999;tick();check(#callbacks==1)
-now=2000;tick();check(#callbacks==1)
-pressF6();check(#callbacks==2 and logs[#logs]:find('timed out',1,true)~=nil)
-callbacks[1]();check(toggles==before)
-tick();check(#callbacks==2)
-callbacks[2]();check(mode==2 and toggles==before+1)
-callbacks[1]();callbacks[2]();check(toggles==before+1)
+local function bridge(command, address, row)
+    if command == 0 then return nativeActive and 1 or 3 end
+    if command == 21 and not address then return available and 1 or 0 end
+    if command == 21 then
+        check(rows[address].address == row)
+        bound = bound + 1
+        return accepted and 1 or 0
+    end
+    check(command == 14 and rows[address] ~= nil)
+    return mode, stock
+end
+local function fixture(address)
+    local manager, common, menu = widget(address), widget(), widget()
+    local first, last = widget(), widget()
+    manager.CommonWidget = common
+    common.BP_parts_briefing_list_menu_equipu = menu
+    local controller = widget()
+    function common:GetOwningPlayer() return controller end
+    menu.IsBattle = false
+    menu.BP_parts_battle_setup_menu = first
+    menu.BP_parts_battle_setup_menu_5 = last
+    last.Slot = {Padding="original padding"}
+    menu.VerticalBox_0 = widget()
+    function menu.VerticalBox_0:AddChildToVerticalBox(row)
+        return {SetPadding=function(_, padding) row.padding = padding end}
+    end
+    local picker = widget()
+    picker.visible, picker.inViewport = false, false
+    manager.WeaponCustomSelectWidget = picker
+    picker.BP_parts_abandonment_chara_list = widget(1000 + address)
+    picker.BP_parts_abandonment_chara_list.Visibility = 0
+    picker.chara_full_xxx = widget(2000 + address)
+    picker.chara_full_xxx.Visibility = 4
+    picker.BP_parts_briefing_list_weapon = widget()
+    picker.BP_parts_briefing_list_weapon.TextBlock_stocknow = text("12")
+    picker.BP_parts_briefing_list_weapon.TextBlock_stockall = text("390")
+    return manager, menu, picker, first, last
+end
 
--- A fresh F6 press replaces a lost toggle and applies exactly one switch.
-callbacks={};pressF6();check(#callbacks==1 and mode==2)
-now=4000;tick();check(#callbacks==1)
-pressF6();check(#callbacks==2)
-now=6000;tick();check(#callbacks==2)
-pressF6();check(#callbacks==3)
-callbacks[1]();callbacks[2]();check(mode==2)
-callbacks[3]();check(mode==1 and toggles==before+2)
-tick();check(#callbacks==4)
-callbacks[4]();check(label.text=='Officer weapons | F6: Bodyguards')
-
--- Retain parity for two presses while work is queued and still fresh.
-callbacks={};before=toggles;pressF6();pressF6()
-check(#callbacks==1)
-callbacks[1]();check(mode==1 and toggles==before)
-
--- A synchronous scheduling error releases the request for the next press.
-function ExecuteInGameThread() error('fixture scheduling failure') end
-pressF6();check(logs[#logs]:find('Weapon fusion scheduling:',1,true)~=nil)
-check(logs[#logs-1]:find('F6 pressed',1,true)~=nil)
-ExecuteInGameThread=immediate;tick();check(mode==1 and toggles==before)
-pressF6();check(mode==2 and toggles==before+1)
--- An error inside the menu update also releases scheduling for another press.
--- Simulate this through a widget method used by the real update function.
-local visible=selector.IsVisible
-function selector:IsVisible() error('fixture menu failure') end
-pressF6();check(logs[#logs]:find('Weapon fusion menu:',1,true)~=nil)
-selector.IsVisible=visible;pressF6();check(mode==1)
-before=queries;manager.valid=false;manager=nil;pressF6();tick();check(queries==before)
-''')
-print(f'Passed {fusion_lua.globals().countChecks()} F6 fusion-menu, hint, inventory-mode, visibility and disabled-state assertions.')
+local attach, update = makeFusion(bridge)
+local manager, menu, picker, first, last = fixture(20)
+managers = {manager}
+nativeActive = false; attach(); check(created == 0)
+nativeActive, available = true, false; attach(); check(created == 0)
+available, menu.IsBattle = true, true; attach(); check(created == 0)
+menu.IsBattle, accepted = false, false; attach(); check(created == 1 and removed == 1)
+accepted = true; attach(); attach(); check(created == 2 and bound == 2)
+local row = rows[manager.address]
+check(row.text_list.value == "Weapon Fusion" and row.padding == "original padding")
+update()
+check(row.bEnableDecide and first.navigation[2] == row and row.navigation[3] == first)
+check(last.navigation[3] == row and row.navigation[2] == last)
+menu.visible, picker.visible, mode, stock = false, true, 2, 42
+update()
+check(picker.BP_parts_abandonment_chara_list.Visibility == 1 and picker.chara_full_xxx.Visibility == 1)
+local list = picker.BP_parts_briefing_list_weapon
+check(list.TextBlock_stocknow.value == "42" and list.TextBlock_stockall.value == "100")
+mode, stock = 4, 41; update(); check(list.TextBlock_stocknow.value == "41")
+mode, stock = 1, 12; update()
+check(picker.BP_parts_abandonment_chara_list.Visibility == 0 and picker.chara_full_xxx.Visibility == 4)
+check(list.TextBlock_stocknow.value == "12" and list.TextBlock_stockall.value == "390")
+manager.valid = false; update()
+local nextManager = fixture(20)
+managers = {nextManager}; attach(); check(created == 3 and bound == 3)
+return "Passed " .. assertions .. " Lua bodyguard fusion menu assertions for attach, navigation, inventory scope, and cleanup."
+'''))

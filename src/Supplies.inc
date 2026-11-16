@@ -49,7 +49,7 @@ static bool RequestDrop(void* manager, int item, const double* position, void* c
         if ((request[0x30] == 0 || request[0x30] == 4) && request[0x31] == At<uint8_t>(character, 0x750))
         {
             using RandomFn = int (*)();
-            const int roll = reinterpret_cast<RandomFn>(At<void*>(Image, 0x7E1C290))() & 0x7FFF;
+            const int roll = reinterpret_cast<RandomFn>(At<void*>(Image, GameRva<0x7E1C290>()))() & 0x7FFF;
             request[0x30] = roll < Config.meatBunPercent * 32768 / 100 ? 0 : 4;
         }
     }

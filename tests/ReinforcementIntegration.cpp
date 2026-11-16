@@ -1,6 +1,7 @@
 // Exercise the actual native callbacks against synthetic formation memory. No game
 // process or hooks are touched; only the original game functions are substituted.
 #include "../src/Game.cpp"
+#include "GameTestAddresses.h"
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -9,7 +10,7 @@ static int Assertions = 0;
 #define CHECK(expression) do { ++Assertions; if (!(expression)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expression); return 1; } } while (0)
 static bool Near(float a, float b) { return fabsf(a - b) < 0.001f; }
 alignas(16) static uint8_t ManagerMemory[0x400];
-alignas(16) static uint8_t GroupMemory[8 * 0x2E68];
+alignas(16) static uint8_t GroupMemory[8 * 0x2E70];
 alignas(16) static uint8_t CorpsMemory[2 * 0xEF8];
 alignas(16) static uint8_t EffectMemory[0x28];
 static int EffectArguments[3];
@@ -85,7 +86,7 @@ static void Setup()
     }
     for (int id = 0; id < 8; ++id)
     {
-        void* group = GroupMemory + id * 0x2E68;
+        void* group = GroupMemory + id * FixtureGroupStride;
         At<void*>(group, 0x28) = ManagerMemory;
         At<int>(group, 0x38) = id == 5 ? 1 : 0;
         At<int>(group, 0x3C) = id;
@@ -97,8 +98,8 @@ static void Setup()
         At<int>(group, 0x2D18) = At<uint8_t>(group, 0x2D61);
         At<float>(group, 0x2DEC) = 100;
     }
-    At<uint8_t>(GroupMemory + 4 * 0x2E68, 0x110) = 1;
-    Image = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(&FakeDead) - 0x13AE060);
+    At<uint8_t>(GroupMemory + 4 * FixtureGroupStride, 0x110) = 1;
+    Image = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(&FakeDead) - GameRva<0x13AE060>());
     OriginalSpecialAttribute = &FakeSpecial;
     OriginalCorpsTick = OriginalGroupTick = &FakeTick;
     OriginalRaise = &FakeRaise;
@@ -129,8 +130,9 @@ static void SetupOrdinaryReinforcements()
 
 #include "NativeEntryProbe.inc"
 
-int main()
+int main(int argc, char** argv)
 {
+    CHECK(SelectBattleFixture(argc, argv));
     Setup();
     OriginalSpecialAttribute = &ClobberSpecialRegisters;
     CHECK(ProbeSpecialEntry(Group(2), 0) == 1);
@@ -456,7 +458,7 @@ int main()
     SpecialAttribute(Group(5), 0); // Concurrent ordinary arrival in another corps.
     Advance(0, 3);
     CHECK(Near(Corps[0].base, MoraleMaximum) && Near(At<float>(CorpsObject(1), 0x28), 400));
-    At<uint8_t>(GroupMemory + 6 * 0x2E68, 0x2DFD) = 1;
+    At<uint8_t>(GroupMemory + 6 * FixtureGroupStride, 0x2DFD) = 1;
     Lower(CorpsObject(0), 100, 0);
     At<int>(ManagerMemory, 0x80) = 7;
     CHECK(RefreshBattle());

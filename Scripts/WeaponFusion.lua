@@ -1,73 +1,89 @@
--- F6 switches the native base-weapon picker; selection and confirmation stay
--- in the game's fusion screen. No battle controls or save writes run here.
+local function valid(widget) return widget and widget:IsValid() end
+
 return function(bridge)
-    local function valid(object) return object and object:IsValid() end
-    local manager, pending, lastError, previousGuards
-    local function current()
-        if not valid(manager) then manager = FindFirstOf("BriefingEquipManager") end
-        if not valid(manager) then return end
-        local selector = manager.WeaponCustomSelectWidget
-        -- This picker can be hosted by another widget, so IsInViewport() is
-        -- false even while it is on screen. Native menu state gates the action.
-        if not valid(selector) or not selector:IsVisible() then return end
-        return selector
-    end
-    local function update(toggle)
-        if bridge(0) ~= 1 then return end
-        local selector = current()
-        if not selector then
-            if toggle then print("[MoraleMatters] Weapon fusion switch skipped: no visible equipment picker.\n") end
-            return
-        end
-        local mode = bridge(14, manager:GetAddress(), toggle and 1 or 0) or 0
-        if toggle then print("[MoraleMatters] Weapon fusion inventory mode=" .. mode .. "\n") end
-        if mode == 0 then return end
-        local characters = selector.BP_parts_abandonment_chara_list
-        if not valid(characters) then return end
-        local guards = mode == 2 or mode == 4
-        local label = characters.text_equipable
-        if valid(label) then
-            local hint = guards and "Bodyguard weapons | F6: Officers" or "Officer weapons | F6: Bodyguards"
-            if mode > 2 then hint = guards and "Bodyguard weapons | Back, then F6: Officers" or "Officer weapons | Back, then F6: Bodyguards" end
-            label:SetText(FText(hint))
-        end
-        if valid(characters.chara_List) then characters.chara_List:SetVisibility(guards and 1 or 0) end
-        local portrait = selector.chara_full_xxx
-        if valid(portrait) and (guards or previousGuards) then portrait:SetVisibility(guards and 1 or 0) end
-        previousGuards = guards
-    end
-    local function schedule(toggle)
-        if toggle then print("[MoraleMatters] Weapon fusion F6 pressed.\n") end
-        local now = bridge(10) or 0
-        if pending then
-            if not toggle then return end
-            if now - pending.queuedAt < 2000 then
-                pending.toggle = not pending.toggle
-                return
-            end
-            print("[MoraleMatters] Weapon fusion callback timed out; replacing it on F6.\n")
-        end
-        -- Polling refreshes the picker but never replaces a missed callback.
-        -- A fresh F6 press supersedes expired work, including its old input.
-        local request = {queuedAt=now, toggle=toggle}
-        pending = request
-        local scheduled, errorMessage = pcall(ExecuteInGameThread, function()
-            if pending ~= request then return end
-            local ok, message = pcall(update, request.toggle)
-            if not ok and lastError ~= tostring(message) then
-                lastError = tostring(message)
-                print("[MoraleMatters] Weapon fusion menu: " .. lastError .. "\n")
-            end
-            if pending == request then pending = nil end
-        end)
-        if not scheduled then
-            if pending == request then pending = nil end
-            if lastError ~= tostring(errorMessage) then
-                lastError = tostring(errorMessage)
-                print("[MoraleMatters] Weapon fusion scheduling: " .. lastError .. "\n")
+    local library = StaticFindObject("/Script/UMG.Default__WidgetBlueprintLibrary")
+    local entries = {}
+
+    local function attach()
+        if bridge(0) ~= 1 or bridge(21) ~= 1 then return end
+        for _, manager in ipairs(FindAllOf("BriefingEquipManager") or {}) do
+            local common = manager.CommonWidget
+            if valid(common) and common:IsInViewport() then
+                local menu = common.BP_parts_briefing_list_menu_equipu
+                if valid(menu) and menu:IsVisible() and menu.IsBattle == false then
+                    local address = manager:GetAddress()
+                    local box, last = menu.VerticalBox_0, menu.BP_parts_battle_setup_menu_5
+                    local controller = common:GetOwningPlayer()
+                    if not entries[address] and valid(box) and valid(last) and valid(controller) then
+                        local row = library:Create(manager, last:GetClass(), controller)
+                        row.text_list:SetText(FText("Weapon Fusion"))
+                        box:AddChildToVerticalBox(row):SetPadding(last.Slot.Padding)
+                        if bridge(21, address, row:GetAddress()) == 1 then
+                            entries[address] = {manager=manager, menu=menu, row=row, last=last, first=menu.BP_parts_battle_setup_menu}
+                        else
+                            row:RemoveFromParent()
+                        end
+                    end
+                end
             end
         end
     end
-    if Key.F6 then RegisterKeyBind(Key.F6, function() schedule(true) end) end
-    LoopAsync(250, function() schedule(false); return false end)
+
+    local function setText(widget, value)
+        if valid(widget) and widget:GetText():ToString() ~= value then widget:SetText(FText(value)) end
+    end
+
+    local function updateEntry(address, entry)
+        local menu, row = entry.menu, entry.row
+        local picker = entry.manager.WeaponCustomSelectWidget
+        if menu:IsVisible() then
+            -- The stock Equipment initializer only enables its first seven rows.
+            row.bEnableDecide = true
+            entry.first:SetNavigationRuleExplicit(2, row)
+            row:SetNavigationRuleExplicit(3, entry.first)
+            entry.last:SetNavigationRuleExplicit(3, row)
+            row:SetNavigationRuleExplicit(2, entry.last)
+        end
+        local mode, stock = bridge(14, address)
+        local visiblePicker = valid(picker) and picker:IsVisible()
+        local bodyguards = mode == 2 or mode == 4
+        if bodyguards and visiblePicker then
+            entry.bodyguardList = true
+            entry.hidden = entry.hidden or {}
+            for _, field in ipairs({"BP_parts_abandonment_chara_list", "chara_full_xxx"}) do
+                local widget = picker[field]
+                if valid(widget) and widget.Visibility ~= 1 then
+                    local id = widget:GetAddress()
+                    entry.hidden[id] = entry.hidden[id] or {widget=widget, visibility=widget.Visibility}
+                    widget:SetVisibility(1)
+                end
+            end
+        elseif entry.hidden and (visiblePicker or menu:IsVisible()) then
+            for _, record in pairs(entry.hidden) do
+                if valid(record.widget) then record.widget:SetVisibility(record.visibility) end
+            end
+            entry.hidden = nil
+        end
+        if visiblePicker and mode and mode > 0 and entry.bodyguardList then
+            -- The native picker caches the previous inventory's stock labels.
+            local list = picker.BP_parts_briefing_list_weapon
+            if valid(list) then
+                setText(list.TextBlock_stocknow, tostring(stock))
+                setText(list.TextBlock_stockall, bodyguards and "100" or "390")
+            end
+            if not bodyguards then entry.bodyguardList = nil end
+        end
+    end
+
+    local function update()
+        for address, entry in pairs(entries) do
+            if valid(entry.manager) and valid(entry.menu) and valid(entry.row) then
+                updateEntry(address, entry)
+            else
+                entries[address] = nil
+            end
+        end
+    end
+
+    return attach, update
 end

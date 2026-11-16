@@ -1,11 +1,12 @@
 #include "../src/Game.cpp"
+#include "GameTestAddresses.h"
 #include <stdio.h>
 using namespace MoraleMatters;
 namespace MoraleMatters { void Log(const char*, ...) {} }
 static int Assertions=0;
 #define CHECK(e) do { ++Assertions; if (!(e)) { fprintf(stderr,"FAIL line %d: %s\n",__LINE__,#e); return 1; } } while(0)
 static bool Near(float a,float b) { return fabsf(a-b)<0.001f; }
-alignas(16) static uint8_t Formation[0x100], Groups[5*0x2E68], Objects[4*0xEF8];
+alignas(16) static uint8_t Formation[0x100], Groups[5*0x2E70], Objects[4*0xEF8];
 static bool FakeDead(void* group) { return At<float>(group,0x2DEC)<=0; }
 static void FakeTick(void*,float) {}
 static float& Morale(int id) { return At<float>(CorpsObject(id),0x28); }
@@ -18,22 +19,23 @@ static void Setup()
     At<void*>(Formation,0x78)=Groups; At<int>(Formation,0x80)=4;
     for(int id=0;id<4;++id)
     {
-        void* group=Groups+id*0x2E68;void* object=Objects+id*0xEF8;
+        void* group=Groups+id*FixtureGroupStride;void* object=Objects+id*0xEF8;
         At<void*>(object,0)=Formation; At<int>(object,0x14)=id;At<int>(object,0xC)=id?1:0;At<float>(object,0x28)=400;
         At<int>(group,0x3C)=id;At<int>(group,0x38)=id;At<int>(group,0x40)=id?1:0;
         At<float>(group,0x2DEC)=100;At<uint8_t>(group,0x2D20)=3;
         At<double>(group,0x2DA8)=id==3?50000:0;
     }
-    void* subordinate=Groups+4*0x2E68;
+    void* subordinate=Groups+4*FixtureGroupStride;
     At<int>(subordinate,0x3C)=4;At<int>(subordinate,0x38)=3;At<int>(subordinate,0x40)=1;
     At<float>(subordinate,0x2DEC)=100;At<uint8_t>(subordinate,0x2D20)=6;
     At<int>(Formation,0x80)=5;
-    Image=reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(&FakeDead)-0x13AE060);
+    Image=reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(&FakeDead)-GameRva<0x13AE060>());
     OriginalCorpsTick=&FakeTick;
     ResetBattle(Formation);
 }
-int main()
+int main(int argc, char** argv)
 {
+    CHECK(SelectBattleFixture(argc, argv));
     Setup(); Tick(1);
     CHECK(Near(Morale(0),400)); CHECK(Near(Morale(1),500)); CHECK(Near(Morale(2),500)); CHECK(Near(Morale(3),400));
     CHECK(Near(Corps[1].base,400) && Near(Corps[1].nativeGains,0));

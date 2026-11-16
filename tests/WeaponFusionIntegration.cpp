@@ -1,6 +1,7 @@
 // Run the actual fusion selection callback and tile renderer in an isolated
 // mapping of the supported game. Engine UI/save services are controlled fixtures.
 #include "../src/Game.cpp"
+#include "GameTestAddresses.h"
 #include "../src/ExpectedBytes.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +16,7 @@ static WeaponFusionTile Source[9], Destination[9], OriginalDestination[9], Inven
 static int SavedCount, SavedId, ConsumedId, CommitCalls, ConsumeCalls, MapCalls;
 static void Noop() {}
 static bool Yes(void*) { return true; }
-static int Focus(void* widget) { return At<int>(widget, 0x394); }
+static int Focus(void* widget) { return At<int>(widget, FusionDetailSelectedSlotOffset()); }
 static void* Null(void*) { return nullptr; }
 static void Animation(void*, void* output) { memset(output, 0, 16); }
 static void MapAdd(void*, void*, void*, int) { ++MapCalls; }
@@ -53,8 +54,8 @@ static void Setup(int destinationValue, int sourceValue, uint8_t destinationType
     for (int i = 0; i < 10; ++i) { MaterialRows[i] = Tiles[0][i]; ResultRows[i] = Tiles[1][i]; At<void*>(Tiles[0][i], 0) = At<void*>(Tiles[1][i], 0) = Vtable; }
     At<void*>(Widget, 0) = Vtable;
     At<void*>(Widget, 0x350) = Material; At<void*>(Widget, 0x358) = Result;
-    At<void*>(Material, 0x380) = MaterialRows; At<int>(Material, 0x388) = 10; At<int>(Material, 0x38C) = 10;
-    At<void*>(Result, 0x380) = ResultRows; At<int>(Result, 0x388) = 10; At<int>(Result, 0x38C) = 10; At<int>(Result, 0x394) = slot;
+    At<void*>(Material, FusionDetailRowsOffset()) = MaterialRows; At<int>(Material, FusionDetailRowsOffset() + sizeof(void*)) = 10; At<int>(Material, FusionDetailRowsOffset() + sizeof(void*) + sizeof(int)) = 10;
+    At<void*>(Result, FusionDetailRowsOffset()) = ResultRows; At<int>(Result, FusionDetailRowsOffset() + sizeof(void*)) = 10; At<int>(Result, FusionDetailRowsOffset() + sizeof(void*) + sizeof(int)) = 10; At<int>(Result, FusionDetailSelectedSlotOffset()) = slot;
     At<void*>(Widget, 0x3A8) = Source; At<int>(Widget, 0x3B0) = 9; At<int>(Widget, 0x3B4) = 9;
     At<void*>(Widget, 0x3D8) = Destination; At<int>(Widget, 0x3E0) = 9; At<int>(Widget, 0x3E4) = 9;
     At<void*>(Widget, 0x480) = OriginalDestination; At<int>(Widget, 0x488) = 9; At<int>(Widget, 0x48C) = 9;
@@ -80,34 +81,34 @@ int main(int argc, char** argv)
     fseek(file, 0, SEEK_END); const long length = ftell(file); rewind(file);
     auto* bytes = static_cast<uint8_t*>(malloc(length)); CHECK(bytes && fread(bytes, 1, length, file) == static_cast<size_t>(length)); fclose(file);
     const auto* nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(bytes + reinterpret_cast<IMAGE_DOS_HEADER*>(bytes)->e_lfanew);
-    CHECK(nt->Signature == IMAGE_NT_SIGNATURE && nt->OptionalHeader.SizeOfImage == 0xB39E000);
+    CHECK(nt->Signature == IMAGE_NT_SIGNATURE && SelectTestGameBuild(nt->OptionalHeader.SizeOfImage));
     Image = static_cast<uint8_t*>(VirtualAlloc(nullptr, nt->OptionalHeader.SizeOfImage, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE)); CHECK(Image);
     const auto* section = IMAGE_FIRST_SECTION(nt);
     for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i) memcpy(Image + section[i].VirtualAddress, bytes + section[i].PointerToRawData, section[i].SizeOfRawData);
     int signatures = 0;
-    for (const auto& expected : ExpectedHooks) { CHECK(memcmp(Image + expected.rva, expected.bytes, sizeof(expected.bytes)) == 0); if (expected.rva == 0x1699750) ++signatures; }
+    for (const auto& expected : GameExpectedHooks()) { CHECK(memcmp(Image + GameRva(expected.rva), expected.bytes, sizeof(expected.bytes)) == 0); if (expected.rva == 0x1699750) ++signatures; }
     CHECK(signatures == 1); free(bytes);
-    memcpy(GuardNativeCommit, Image + 0x1517360, sizeof(GuardNativeCommit));
-    memcpy(GuardNativeConsume, Image + 0x15172D0, sizeof(GuardNativeConsume));
+    memcpy(GuardNativeCommit, Image + TestRva<0x1517360>(), sizeof(GuardNativeCommit));
+    memcpy(GuardNativeConsume, Image + TestRva<0x15172D0>(), sizeof(GuardNativeConsume));
     Vtable[0x180 / 8] = reinterpret_cast<void*>(&Null);
-    Jump(0x4424AE0, reinterpret_cast<void*>(&Null)); Jump(0x16EF470, reinterpret_cast<void*>(&Noop));
-    Jump(0x3E86730, reinterpret_cast<void*>(&Animation)); Jump(0x1463840, reinterpret_cast<void*>(&Null));
-    Jump(0x3E8D5B0, reinterpret_cast<void*>(&Noop)); Jump(0x3E8D510, reinterpret_cast<void*>(&Noop));
-    Jump(0x3E8EB00, reinterpret_cast<void*>(&Noop)); Jump(0x3E8D420, reinterpret_cast<void*>(&Noop));
-    Jump(0x169B500, reinterpret_cast<void*>(&Noop));
-    Jump(0x169B710, reinterpret_cast<void*>(&Noop)); Jump(0x1270980, reinterpret_cast<void*>(&MapAdd));
-    Jump(0x1536A60, reinterpret_cast<void*>(&Null)); Jump(0x14BEEB0, reinterpret_cast<void*>(&Null));
-    Jump(0x11F69B0, reinterpret_cast<void*>(&Reserve));
-    Jump(0x1215C60, reinterpret_cast<void*>(&Grow)); Jump(0x1216160, reinterpret_cast<void*>(&Resize));
-    Jump(0x7CB8202, reinterpret_cast<void*>(&Copy)); Jump(0x1A9D0D0, reinterpret_cast<void*>(&free));
-    Jump(0x1517360, reinterpret_cast<void*>(&Commit)); Jump(0x15172D0, reinterpret_cast<void*>(&Consume)); Jump(0x153FE50, reinterpret_cast<void*>(&Null));
+    Jump(TestRva<0x4424AE0>(), reinterpret_cast<void*>(&Null)); Jump(TestRva<0x16EF470>(), reinterpret_cast<void*>(&Noop));
+    Jump(TestRva<0x3E86730>(), reinterpret_cast<void*>(&Animation)); Jump(TestRva<0x1463840>(), reinterpret_cast<void*>(&Null));
+    Jump(TestRva<0x3E8D5B0>(), reinterpret_cast<void*>(&Noop)); Jump(TestRva<0x3E8D510>(), reinterpret_cast<void*>(&Noop));
+    Jump(TestRva<0x3E8EB00>(), reinterpret_cast<void*>(&Noop)); Jump(TestRva<0x3E8D420>(), reinterpret_cast<void*>(&Noop));
+    Jump(TestRva<0x169B500>(), reinterpret_cast<void*>(&Noop));
+    Jump(TestRva<0x169B710>(), reinterpret_cast<void*>(&Noop)); Jump(TestRva<0x1270980>(), reinterpret_cast<void*>(&MapAdd));
+    Jump(TestRva<0x1536A60>(), reinterpret_cast<void*>(&Null)); Jump(TestRva<0x14BEEB0>(), reinterpret_cast<void*>(&Null));
+    Jump(TestRva<0x11F69B0>(), reinterpret_cast<void*>(&Reserve));
+    Jump(TestRva<0x1215C60>(), reinterpret_cast<void*>(&Grow)); Jump(TestRva<0x1216160>(), reinterpret_cast<void*>(&Resize));
+    Jump(TestRva<0x7CB8202>(), reinterpret_cast<void*>(&Copy)); Jump(TestRva<0x1A9D0D0>(), reinterpret_cast<void*>(&free));
+    Jump(TestRva<0x1517360>(), reinterpret_cast<void*>(&Commit)); Jump(TestRva<0x15172D0>(), reinterpret_cast<void*>(&Consume)); Jump(TestRva<0x153FE50>(), reinterpret_cast<void*>(&Null));
     // Voice/system singletons stay null. Only confirmation uses GameInstance.
-    At<void*>(Image, 0xA9C50E0) = nullptr; At<void*>(Image, 0xA9C50F8) = nullptr; At<void*>(Image, 0xA9C50F0) = nullptr;
-    Image[0xA6DA768] = 0;
+    At<void*>(Image, TestRva<0xA9C50E0>()) = nullptr; At<void*>(Image, TestRva<0xA9C50F8>()) = nullptr; At<void*>(Image, TestRva<0xA9C50F0>()) = nullptr;
+    Image[TestRva<0xA6DA768>()] = 0;
     CHECK(MH_Initialize() == MH_OK);
-    CHECK(MH_CreateHook(Image + 0x1699750, reinterpret_cast<void*>(&WeaponFusionSelect), reinterpret_cast<void**>(&OriginalWeaponFusionSelect)) == MH_OK);
+    CHECK(MH_CreateHook(Image + TestRva<0x1699750>(), reinterpret_cast<void*>(&WeaponFusionSelect), reinterpret_cast<void**>(&OriginalWeaponFusionSelect)) == MH_OK);
     CHECK(MH_EnableHook(MH_ALL_HOOKS) == MH_OK);
-    auto select = reinterpret_cast<WeaponFusionSelectFn>(Image + 0x1699750);
+    auto select = reinterpret_cast<WeaponFusionSelectFn>(Image + TestRva<0x1699750>());
     for (int type = 0; type <= 12; ++type)
         for (int slot : {1, 8, 9})
             for (int increment : {1, 2, 7, 1000})
@@ -136,7 +137,7 @@ int main(int argc, char** argv)
     Config = Settings(); Setup(INT32_MAX - 1, 10); select(Widget); CHECK(Destination[0].value == INT32_MAX);
     Setup(20, -1); select(Widget); CHECK(Destination[0].value == -1);
     Setup(-1, 0); select(Widget); CHECK(Destination[0].value == 0);
-    Setup(20, 10); At<int>(Widget, 0x400) = 0; At<int>(Result, 0x394) = 0; select(Widget); CHECK(Destination[0].value == 20); // Element row, no numeric fusion.
+    Setup(20, 10); At<int>(Widget, 0x400) = 0; At<int>(Result, FusionDetailSelectedSlotOffset()) = 0; select(Widget); CHECK(Destination[0].value == 20); // Element row, no numeric fusion.
     Setup(20, 10); At<int>(Widget, 0x404) = 0; select(Widget); CHECK(Destination[0].value == 20); // No pending selection.
     // Replacing/revisiting a pending selection must not farm increments without
     // consuming another material. Match against the weapon's original tile.
@@ -152,14 +153,14 @@ int main(int argc, char** argv)
     At<void*>(Widget, 0x418) = mapping; At<int>(Widget, 0x420) = 1;
     At<int>(Widget, 0x428) = 1; At<int>(Widget, 0x440) = 1;
     At<void*>(Widget, 0x480) = before; At<int>(Widget, 0x488) = 9;
-    Jump(0x169B940, reinterpret_cast<void*>(&Yes)); Jump(0x169B9C0, reinterpret_cast<void*>(&Focus)); Jump(0x169C7C0, reinterpret_cast<void*>(&Noop));
-    CHECK(reinterpret_cast<bool (*)(void*)>(Image + 0x169A2D0)(Widget));
+    Jump(TestRva<0x169B940>(), reinterpret_cast<void*>(&Yes)); Jump(TestRva<0x169B9C0>(), reinterpret_cast<void*>(&Focus)); Jump(TestRva<0x169C7C0>(), reinterpret_cast<void*>(&Noop));
+    CHECK(reinterpret_cast<bool (*)(void*)>(Image + TestRva<0x169A2D0>())(Widget));
     CHECK(Destination[0].value == 20 && At<int>(Tiles[1][1], 0x4C4) == 20);
     CHECK(memcmp(Source, InventorySource, sizeof(Source)) == 0 && CommitCalls == 0 && ConsumeCalls == 0);
     // Actual native confirmation normalizes the preview, passes it to the save
     // service, consumes the material, and clears its UI-local weapon copies.
-    Setup(20, 10); select(Widget); At<void*>(Image, 0xA9C50E0) = Singleton;
-    reinterpret_cast<WeaponFusionSelectFn>(Image + 0x16990F0)(Widget);
+    Setup(20, 10); select(Widget); At<void*>(Image, TestRva<0xA9C50E0>()) = Singleton;
+    reinterpret_cast<WeaponFusionSelectFn>(Image + TestRva<0x16990F0>())(Widget);
     CHECK(CommitCalls == 1 && ConsumeCalls == 1 && SavedId == 123 && ConsumedId == 456);
     CHECK(SavedCount == 9 && Saved[0].item == 4 && Saved[0].value == 22);
     CHECK(At<int>(Widget, 0x390) == -1 && At<int>(Widget, 0x3C0) == -1);

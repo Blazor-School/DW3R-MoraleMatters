@@ -1,16 +1,18 @@
 // Production archer callbacks plus the supported executable's real range and
 // target-assignment routines. Engine services are controlled fixtures; no game is opened.
 #include "../src/Game.cpp"
+#include "GameTestAddresses.h"
 #include "../src/ExpectedBytes.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <initializer_list>
 
 using namespace MoraleMatters;
+static uint32_t NativeGroupStride;
 static int Assertions = 0, PriorityCalls = 0, ResolveCalls = 0, AssignCalls = 0, HitCalls = 0;
 #define CHECK(expression) do { ++Assertions; if (!(expression)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expression); return 1; } } while (0)
 static bool Near(float a, float b) { return fabsf(a - b) < 0.001f; }
-alignas(16) static uint8_t Formation[0x100], Groups[8 * 0x2E68], CorpsMemory[2 * 0xEF8];
+alignas(16) static uint8_t Formation[0x100], Groups[8 * 0x2E70], CorpsMemory[2 * 0xEF8];
 alignas(16) static uint8_t Characters[8][0xB10], Positions[8][0x220], Controller[0x510], CharacterManager[0x500], Blackboard[0x100], Parameters[0x800], Class[0x40], HitComponent[0x100];
 static uint64_t Identities[8];
 static void* Entries[8], *ClassSlots[1], *Vtable[0xC00 / 8], *Current;
@@ -110,12 +112,12 @@ static void Setup()
     At<int>(Formation, 0x80) = 8;
     At<void*>(CharacterManager, 0x50) = Entries;
     At<int>(CharacterManager, 0x58) = 8;
-    At<void*>(Image, 0xA9C50F0) = CharacterManager;
-    At<void*>(Image, 0xA9C6418) = Parameters;
+    At<void*>(Image, TestRva<0xA9C50F0>()) = CharacterManager;
+    At<void*>(Image, TestRva<0xA9C6418>()) = Parameters;
     At<float>(Parameters, 0x324) = 1500;
     for (int id = 0; id < 8; ++id)
     {
-        void* group = Groups + id * 0x2E68;
+        void* group = Groups + id * NativeGroupStride;
         At<void*>(group, 0x28) = Formation;
         At<int>(group, 0x38) = id ? 1 : 0;
         At<int>(group, 0x3C) = id;
@@ -174,7 +176,7 @@ int main(int argc, char** argv)
     const auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(bytes);
     CHECK(dos->e_magic == IMAGE_DOS_SIGNATURE);
     const auto* nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(bytes + dos->e_lfanew);
-    CHECK(nt->Signature == IMAGE_NT_SIGNATURE && nt->OptionalHeader.SizeOfImage == 0xB39E000);
+    CHECK(nt->Signature == IMAGE_NT_SIGNATURE && SelectTestGameBuild(nt->OptionalHeader.SizeOfImage));
     const size_t imageSize = nt->OptionalHeader.SizeOfImage;
     Image = static_cast<uint8_t*>(VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
     CHECK(Image != nullptr);
@@ -185,36 +187,39 @@ int main(int argc, char** argv)
         memcpy(Image + sections[i].VirtualAddress, bytes + sections[i].PointerToRawData, sections[i].SizeOfRawData);
     }
     free(bytes);
-    for (const auto& expected : ExpectedHooks)
-        CHECK(memcmp(Image + expected.rva, expected.bytes, sizeof(expected.bytes)) == 0);
-    Jump(0x13AE060, reinterpret_cast<void*>(&Dead));
-    Jump(0x1E291F0, reinterpret_cast<void*>(&Owner));
-    Jump(0x1E2BCF0, reinterpret_cast<void*>(&WeakValid));
-    Jump(0x13DD1B0, reinterpret_cast<void*>(&GetTarget));
-    Jump(0x1290CA0, reinterpret_cast<void*>(&GetClass));
-    Jump(0x174E580, reinterpret_cast<void*>(&NotMounted));
-    Jump(0x13D0120, reinterpret_cast<void*>(&ReleaseTicket));
-    Jump(0x13D0480, reinterpret_cast<void*>(&ReleaseTicket));
-    Jump(0x13DE6B0, reinterpret_cast<void*>(&SetTargetKey));
-    Jump(0x1A5DBE0, reinterpret_cast<void*>(static_cast<double (*)(double, double)>(&atan2)));
-    Jump(0x1453710, reinterpret_cast<void*>(&NativeConfig));
-    Jump(0x42A83E0, reinterpret_cast<void*>(&NativeNull));
-    Jump(0x1746710, reinterpret_cast<void*>(&NativeAttribute));
-    Jump(0x174F770, reinterpret_cast<void*>(&NativeGroup));
-    Vtable[0xA58 / 8] = Vtable[0xA70 / 8] = Vtable[0xA18 / 8] = reinterpret_cast<void*>(&NativePower);
+    NativeGroupStride = NativeTestGroupStride(Image);
+    CHECK(NativeGroupStride == BattleGroupStride());
+    for (const auto& expected : GameExpectedHooks())
+        CHECK(memcmp(Image + GameRva(expected.rva), expected.bytes, sizeof(expected.bytes)) == 0);
+    Jump(TestRva<0x13AE060>(), reinterpret_cast<void*>(&Dead));
+    Jump(TestRva<0x1E291F0>(), reinterpret_cast<void*>(&Owner));
+    Jump(TestRva<0x1E2BCF0>(), reinterpret_cast<void*>(&WeakValid));
+    Jump(TestRva<0x13DD1B0>(), reinterpret_cast<void*>(&GetTarget));
+    Jump(TestRva<0x1290CA0>(), reinterpret_cast<void*>(&GetClass));
+    Jump(TestRva<0x174E580>(), reinterpret_cast<void*>(&NotMounted));
+    Jump(TestRva<0x13D0120>(), reinterpret_cast<void*>(&ReleaseTicket));
+    Jump(TestRva<0x13D0480>(), reinterpret_cast<void*>(&ReleaseTicket));
+    Jump(TestRva<0x13DE6B0>(), reinterpret_cast<void*>(&SetTargetKey));
+    Jump(TestRva<0x1A5DBE0>(), reinterpret_cast<void*>(static_cast<double (*)(double, double)>(&atan2)));
+    Jump(TestRva<0x1453710>(), reinterpret_cast<void*>(&NativeConfig));
+    Jump(TestRva<0x42A83E0>(), reinterpret_cast<void*>(&NativeNull));
+    Jump(TestRva<0x1746710>(), reinterpret_cast<void*>(&NativeAttribute));
+    Jump(TestRva<0x174F770>(), reinterpret_cast<void*>(&NativeGroup));
+    const size_t characterVtableShift = ActiveGameBuild == GameBuild::Patch110 ? 1 : 0;
+    Vtable[0xA58 / 8 + characterVtableShift] = Vtable[0xA70 / 8 + characterVtableShift] = Vtable[0xA18 / 8 + characterVtableShift] = reinterpret_cast<void*>(&NativePower);
     Vtable[0x840 / 8] = reinterpret_cast<void*>(&ClearAttack);
     ClassSlots[0] = Class + 0x30;
     At<void*>(Class, 0x30) = ClassSlots;
     At<int>(Class, 0x38) = 0;
     ArcherTarget = &GetTarget;
-    NativeRange = reinterpret_cast<ArcherRangeFn>(Image + 0x13D6B80);
+    NativeRange = reinterpret_cast<ArcherRangeFn>(Image + TestRva<0x13D6B80>());
     ArcherInRange = &CountedRange;
-    ArcherSetTarget = reinterpret_cast<ArcherSetFn>(Image + 0x13CE640);
+    ArcherSetTarget = reinterpret_cast<ArcherSetFn>(Image + TestRva<0x13CE640>());
     CHECK(MH_Initialize() == MH_OK);
-    CHECK(MH_CreateHook(Image + 0x13D43E0, reinterpret_cast<void*>(&ArcherPriority), reinterpret_cast<void**>(&OriginalArcherPriority)) == MH_OK);
-    CHECK(MH_CreateHook(Image + 0x13D6E60, reinterpret_cast<void*>(&ArcherResolve), reinterpret_cast<void**>(&OriginalArcherResolve)) == MH_OK);
-    CHECK(MH_CreateHook(Image + 0x13D77D0, reinterpret_cast<void*>(&ArcherAssign), reinterpret_cast<void**>(&OriginalArcherAssign)) == MH_OK);
-    CHECK(MH_CreateHook(Image + 0x13978F0, reinterpret_cast<void*>(&ArcherHit), reinterpret_cast<void**>(&OriginalArcherHit)) == MH_OK);
+    CHECK(MH_CreateHook(Image + TestRva<0x13D43E0>(), reinterpret_cast<void*>(&ArcherPriority), reinterpret_cast<void**>(&OriginalArcherPriority)) == MH_OK);
+    CHECK(MH_CreateHook(Image + TestRva<0x13D6E60>(), reinterpret_cast<void*>(&ArcherResolve), reinterpret_cast<void**>(&OriginalArcherResolve)) == MH_OK);
+    CHECK(MH_CreateHook(Image + TestRva<0x13D77D0>(), reinterpret_cast<void*>(&ArcherAssign), reinterpret_cast<void**>(&OriginalArcherAssign)) == MH_OK);
+    CHECK(MH_CreateHook(Image + TestRva<0x13978F0>(), reinterpret_cast<void*>(&ArcherHit), reinterpret_cast<void**>(&OriginalArcherHit)) == MH_OK);
     CHECK(MH_EnableHook(MH_ALL_HOOKS) == MH_OK);
     // The detours are installed on the real entry bytes. Only fallback bodies and
     // the large hit-reaction engine are stand-ins; range/assignment execute natively.
@@ -223,15 +228,15 @@ int main(int argc, char** argv)
     OriginalArcherAssign = &Assign;
     OriginalArcherHit = &Hit;
     FlushInstructionCache(GetCurrentProcess(), Image, imageSize);
-    const auto priorityEntry = reinterpret_cast<ArcherPriorityFn>(Image + 0x13D43E0);
-    const auto resolveEntry = reinterpret_cast<ArcherResolveFn>(Image + 0x13D6E60);
-    const auto assignEntry = reinterpret_cast<ArcherAssignFn>(Image + 0x13D77D0);
-    const auto hitEntry = reinterpret_cast<ArcherHitFn>(Image + 0x13978F0);
+    const auto priorityEntry = reinterpret_cast<ArcherPriorityFn>(Image + TestRva<0x13D43E0>());
+    const auto resolveEntry = reinterpret_cast<ArcherResolveFn>(Image + TestRva<0x13D6E60>());
+    const auto assignEntry = reinterpret_cast<ArcherAssignFn>(Image + TestRva<0x13D77D0>());
+    const auto hitEntry = reinterpret_cast<ArcherHitFn>(Image + TestRva<0x13978F0>());
     // Execute the real CALL instruction at the shared damage calculation site.
     // Return immediately afterwards to inspect its retained HP-damage register.
-    CHECK(Image[0x1534998] == 0xE8);
-    Image[0x153499D] = 0xC3;
-    ArcherProbeCall = Image + 0x1534998;
+    CHECK(Image[TestRva<0x1534998>()] == 0xE8);
+    Image[TestRva<0x153499D>()] = 0xC3;
+    ArcherProbeCall = Image + TestRva<0x1534998>();
     FlushInstructionCache(GetCurrentProcess(), Image, imageSize);
 
     Setup();
@@ -392,7 +397,7 @@ int main(int argc, char** argv)
     ArcherDamageProbe(HitComponent, nullptr, 20, 7, 0, false, &result);
     CHECK(Near(ObservedDamage, 20));
     Setup();
-    OriginalOnscreenHit = reinterpret_cast<OnscreenHitFn>(Image + 0x1534B60);
+    OriginalOnscreenHit = reinterpret_cast<OnscreenHitFn>(Image + TestRva<0x1534B60>());
     At<float>(CorpsObject(0), 0x28) = 100;
     float baseline, damage, auxiliary;
     bool nativeFlag;

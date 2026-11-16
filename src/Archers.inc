@@ -91,7 +91,7 @@ static bool SelectRandomArcherTarget(void* controller, void* owner)
     if (search.controller == controller && search.owner == owner && now < search.retry)
         return false;
     search = {controller, owner, now + 500};
-    void* manager = At<void*>(Image, 0xA9C50F0); // Native CharacterManager singleton.
+    void* manager = At<void*>(Image, GameRva<0xA9C50F0>()); // Native CharacterManager singleton.
     if (!Readable(manager, 0x60))
         return false;
     const int count = At<int>(manager, 0x58);
@@ -162,7 +162,7 @@ struct ArcherDamageFrame { float xmm6[4]; float* storedDamage; bool zeroDamage; 
 static_assert(offsetof(ArcherDamageFrame, storedDamage) == 0x10 && offsetof(ArcherDamageFrame, zeroDamage) == 0x18, "Archer damage bridge layout");
 extern "C" float MoraleMattersArcherDamage(void* component, float damage, void* returnAddress, ArcherDamageFrame* caller)
 {
-    if (returnAddress != Image + 0x153499D || Config.archerDamageTaken == 1 || !component || damage < 0 || !isfinite(damage))
+    if (returnAddress != Image + GameRva<0x153499D>() || Config.archerDamageTaken == 1 || !component || damage < 0 || !isfinite(damage))
         return damage;
     void* defender = At<void*>(component, 0xB8);
     const float adjusted = damage * Config.archerDamageTaken;

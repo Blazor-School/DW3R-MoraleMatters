@@ -1,5 +1,6 @@
 // Production per-hit hook with synthetic game objects and a replacement native calculation.
 #include "../src/Game.cpp"
+#include "GameTestAddresses.h"
 #include <stdio.h>
 #include <initializer_list>
 
@@ -7,7 +8,7 @@ using namespace MoraleMatters;
 static int Assertions = 0, Calls = 0;
 #define CHECK(expression) do { ++Assertions; if (!(expression)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expression); return 1; } } while (0)
 static bool Near(float a, float b) { return fabsf(a - b) < 0.001f; }
-alignas(16) static uint8_t Formation[0x100], Groups[2 * 0x2E68], CorpsMemory[2 * 0xEF8], Characters[2][0x900], AttributesMemory[2][0x180];
+alignas(16) static uint8_t Formation[0x100], Groups[2 * 0x2E70], CorpsMemory[2 * 0xEF8], Characters[2][0x900], AttributesMemory[2][0x180];
 static float ObservedMotion, NativeRate = 1;
 static uint64_t ObservedFlags;
 static bool Protect = false, Block = false;
@@ -37,7 +38,7 @@ static void Setup(float morale)
     At<int>(Formation, 0x80) = 2;
     for (int id = 0; id < 2; ++id)
     {
-        void* group = Groups + id * 0x2E68;
+        void* group = Groups + id * FixtureGroupStride;
         At<void*>(group, 0x28) = Formation;
         At<int>(group, 0x38) = id;
         At<int>(group, 0x3C) = id;
@@ -52,15 +53,16 @@ static void Setup(float morale)
         At<float>(AttributesMemory[id], 0x108) = 1;
         At<float>(AttributesMemory[id], 0x10C) = 1;
     }
-    Image = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(&FakeDead) - 0x13AE060);
+    Image = reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(&FakeDead) - GameRva<0x13AE060>());
     ResetBattle(Formation);
     OriginalOnscreenHit = &FakeHit;
     Protect = Block = false;
     NativeRate = 1;
     Calls = 0;
 }
-int main()
+int main(int argc, char** argv)
 {
+    CHECK(SelectBattleFixture(argc, argv));
     float damage, guard;
     bool guarded;
     Setup(100);
