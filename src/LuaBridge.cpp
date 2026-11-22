@@ -18,7 +18,44 @@ namespace
     ToNumberFn ToNumber = nullptr;
     PushIntegerFn PushInteger = nullptr;
     PushNumberFn PushNumber = nullptr;
+    enum HotkeyCapture : LONG { Unbound, Listening, Pressed };
     MoraleMatters::HotkeyState Hotkeys[256];
+    HHOOK HotkeyHook = nullptr;
+    DWORD HotkeyThread = 0;
+    volatile LONG CapturedKeys[256]{};
+
+    LRESULT CALLBACK TrackHotkeyMessage(int code, WPARAM removed, LPARAM parameter)
+    {
+        if (code >= 0 && removed == PM_REMOVE)
+        {
+            const auto& message = *reinterpret_cast<const MSG*>(parameter);
+            if ((message.message == WM_KEYDOWN || message.message == WM_SYSKEYDOWN) && message.wParam < 256 && !(message.lParam & (1L << 30)) && message.hwnd == GetForegroundWindow())
+                InterlockedCompareExchange(&CapturedKeys[message.wParam], Pressed, Listening);
+        }
+        return CallNextHookEx(nullptr, code, removed, parameter);
+    }
+
+    bool ReadHotkey(int key)
+    {
+        DWORD process = 0;
+        const DWORD thread = GetWindowThreadProcessId(GetForegroundWindow(), &process);
+        const bool focused = process == GetCurrentProcessId();
+        if (focused && thread != HotkeyThread)
+        {
+            if (HotkeyHook)
+                UnhookWindowsHookEx(HotkeyHook);
+            HotkeyThread = thread;
+            HotkeyHook = SetWindowsHookExW(WH_GETMESSAGE, TrackHotkeyMessage, nullptr, thread);
+            if (MoraleMatters::Config.liveEvidence)
+                MoraleMatters::Log("Live evidence: hotkey message capture installed=%d on game window thread.", HotkeyHook != nullptr);
+        }
+        if (!HotkeyHook)
+            return Hotkeys[key].Update(focused, (GetAsyncKeyState(key) & 0x8000) != 0);
+        // The window thread only latches key-down events. Lua consumes them on the game thread.
+        InterlockedCompareExchange(&CapturedKeys[key], Listening, Unbound);
+        const bool pressed = InterlockedCompareExchange(&CapturedKeys[key], Listening, Pressed) == Pressed;
+        return focused && pressed;
+    }
 
     void* RelativeTarget(uint8_t* instruction)
     {
@@ -271,14 +308,12 @@ extern "C" __declspec(dllexport) int MoraleMatters_Query(lua_State* lua)
         const int key = static_cast<int>(Integer(lua, 2));
         if (key <= 0 || key >= 256)
             return 0;
-        DWORD process = 0;
-        GetWindowThreadProcessId(GetForegroundWindow(), &process);
-        Number(lua, Hotkeys[key].Update(process == GetCurrentProcessId(), (GetAsyncKeyState(key) & 0x8000) != 0) ? 1 : 0);
+        Number(lua, ReadHotkey(key) ? 1 : 0);
         return 1;
     }
     if (operation == 18)
     {
-        Number(lua, PlayGuardFeedbackSound(Integer(lua, 2) == 1) ? 1 : 0);
+        Number(lua, PlayGuardFeedbackSound(Integer(lua, 2) == 1, Numeric(lua, 3)) ? 1 : 0);
         return 1;
     }
     if (operation == 19)

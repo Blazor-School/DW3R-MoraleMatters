@@ -138,6 +138,12 @@ public class ModSettingForm : IValidatableObject
 
     public bool GuardPressureBreakSound { get; set; } = true;
 
+    [Range(0.0, 100.0)]
+    public double GuardPressureBreakVolumePercent { get; set; } = 50;
+
+    [Range(0.0, 100.0)]
+    public double GuardPressureHitVolumePercent { get; set; } = 50;
+
     [Range(0.3, 3.0)]
     public double GuardPressureIndicatorSeconds { get; set; } = 1.2;
 

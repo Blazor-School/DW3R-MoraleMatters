@@ -181,9 +181,16 @@ static void GuardDisruption(void* defender, void* group)
         distances[at] = distance;
     }
     GuardPulseCooldown[groupId] = GuardPressure.disruptionCooldown;
+    int disrupted = 0;
     for (int index = 0; index < selected; ++index)
         if (auto* actor = GuardActorFor(nearest[index], true))
+        {
             actor->state.Disrupt(GroupMorale(Group(actor->group)), GuardPressure);
+            ++disrupted;
+        }
+    static volatile LONG evidence = 0;
+    if (disrupted > 0 && SampleLiveEvidence(evidence))
+        Log("Live evidence: guard disruption group=%d targets=%d.", groupId, disrupted);
 }
 
 // Mid-function ABI: candidate/native-break/mounted/special occupy successive bytes.
@@ -218,14 +225,22 @@ extern "C" int MoraleMattersGuardDecision(void* component, void* attacker, uint3
     const float threshold = GuardThreshold(defender, group);
     if (actor->state.cooldown <= 0)
         actor->touched = ++GuardFeedbackSequence;
-    if (!naturalBreak && !actor->state.Block((flags & 1) != 0, threshold, GuardPressure))
-        return 0;
+    if (!naturalBreak)
+    {
+        const float before = actor->state.pressure;
+        const bool broke = actor->state.Block((flags & 1) != 0, threshold, GuardPressure);
+        static volatile LONG evidence = 0;
+        if (actor->state.pressure != before && SampleLiveEvidence(evidence))
+            Log("Live evidence: guarded hit group=%d member=%d pressure=%.2f -> %.2f threshold=%.2f.", actor->group, actor->member, before, actor->state.pressure, threshold);
+        if (!broke)
+            return 0;
+    }
     if (actor->state.cooldown > 0)
         return 0;
     actor->state.Break(GuardPressure);
     actor->breakSequence = ++GuardBreakEvents;
     GuardDisruption(defender, group);
-    if (GuardBreakEvents <= 12 || GuardBreakEvents % 100 == 0)
+    if (Config.liveEvidence || GuardBreakEvents <= 12 || GuardBreakEvents % 100 == 0)
         Log("Guard break: group=%d member=%d morale=%.0f charge=%d native=%d opening=%.2fs.", actor->group, actor->member, GroupMorale(group), (flags & 1) != 0, naturalBreak, GuardPressure.openingSeconds);
     return naturalBreak ? 0 : 1;
 }

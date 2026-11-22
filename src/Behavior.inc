@@ -142,7 +142,12 @@ static void AdvanceGroupBehavior(void* group, float dt)
             member.shockRemaining = 0;
         member.corpsBroken = breaking;
         if (!wasRegrouping && (member.regroupRemaining > 0 || breaking))
+        {
             RecordFormationBreak(id);
+            static volatile LONG evidence = 0;
+            if (!breaking && SampleLiveEvidence(evidence))
+                Log("Live evidence: infantry regroup group=%d morale=%.2f time=%.2fs.", id, GroupMorale(group), member.regroupRemaining);
+        }
     }
 }
 
@@ -180,7 +185,13 @@ static void UpdateCorpsBehavior(int corps, float dt, float& morale)
     const float fraction = count > 0 ? static_cast<float>(nearby) / count : 0;
     const float gain = state.Advance(elapsed, combat || count == 0, Corps[corps].base, fraction, Behavior);
     if (gain > 0)
-        RecordMorale(corps, MoraleReason::Recovery, Corps[corps].AddPermanent(morale, gain));
+    {
+        const float paid = Corps[corps].AddPermanent(morale, gain);
+        RecordMorale(corps, MoraleReason::Recovery, paid);
+        static volatile LONG evidence = 0;
+        if (paid > 0 && SampleLiveEvidence(evidence))
+            Log("Live evidence: passive recovery corps=%d gained=%.2f morale=%.2f commanderNearby=%d/%d elapsed=%.2fs.", corps, paid, morale, nearby, count, elapsed);
+    }
 }
 
 static void UpdateFormationBreak(int corps, float dt, float morale)
@@ -434,6 +445,9 @@ static void* FormationOffset(void* group, double* result, int member)
         blend = Clamp(blend, 0, 1);
     }
     scale += (Behavior.withdrawalScale - scale) * blend;
+    static volatile LONG evidence = 0;
+    if (fabsf(scale - 1) > 0.02f && SampleLiveEvidence(evidence))
+        Log("Live evidence: formation spacing group=%d morale=%.2f scale=%.3f commanderNearby=%d.", At<int>(group, 0x3C), morale, scale, state.commanderNear);
     result[0] *= scale;
     result[1] *= scale;
     // Pull ordinary infantry a bounded distance toward their living corps leader.

@@ -11,6 +11,7 @@
         <PackageReference Include="Roar.DependencyInjection" Version="2.2.0" />
         <PackageReference Include="Velopack" Version="1.2.161" />
         <Compile Include="GuardPressureSettingsCheck.cs" />
+        <Compile Include="../MoraleMattersUI/MoraleMatterApp/MoraleMattersUI/Forms/GameFolderForm.cs" Link="GameFolderForm.cs" />
         <Compile Include="../MoraleMattersUI/MoraleMatterApp/MoraleMattersUI/Forms/ModSettingForm.cs" Link="ModSettingForm.cs" />
         <Compile Include="../MoraleMattersUI/MoraleMatterApp/MoraleMattersUI/Services/ModService.cs" Link="ModService.cs" />
         <Compile Include="../MoraleMattersUI/MoraleMatterApp/MoraleMattersUI/Services/VelopackLogger.cs" Link="VelopackLogger.cs" />

@@ -60,6 +60,7 @@ namespace MoraleMatters
         case 0x1536880: return 0x153CC50;
         case 0x1562680: return 0x156C8E0;
         case 0x1641D20: return 0x1649D40;
+        case 0x1646040: return 0x164E190;
         case 0x16963C0: return 0x16A1B10;
         case 0x1696920: return 0x16A2070;
         case 0x1696EE0: return 0x16A2630;

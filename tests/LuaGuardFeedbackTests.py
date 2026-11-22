@@ -38,7 +38,9 @@ local function widget()
  return w
 end
 function FText(value) return value end
-local parent,hud,sound,manager=widget(),widget(),widget(),widget()
+local parent,hud,manager,saveManager,save=widget(),widget(),widget(),widget(),widget()
+save.OptionData={Sound={SEVolume=16}}
+saveManager.GameStatusSaveGame=save
 local canvasClass,slotClass,componentClass=widget(),widget(),widget()
 canvasClass.kind,slotClass.kind='CanvasPanel','CanvasPanelSlot'
 local gauges={}
@@ -67,13 +69,13 @@ end
 local actors,ids={},{}
 for id,gauge in ipairs(gauges) do actors[id]=gauge.actor;ids[id]=1000+id end
 manager.NPCHeadWidgetInfo=array({{Actors=array(actors),UnitID=array(ids)}})
-function sound:PlayRepelSE(spatial,position) check(spatial);sounds=sounds+1;self.position=position end
 function StaticFindObject(path)
  return ({['/Script/UMG.WidgetComponent']=componentClass,['/Script/UMG.CanvasPanel']=canvasClass,['/Script/UMG.CanvasPanelSlot']=slotClass})[path]
 end
-function FindFirstOf(name) return ({SoundManager=sound,BattleHUDManager=manager})[name] end
+function FindFirstOf(name) return ({SaveDataManager=saveManager,BattleHUDManager=manager})[name] end
 local entries,now,generation={},1,1
 local customSound,customRequests,customHits=false,0,0
+local lastGain
 local missing=false
 local function row(token,pressure,flash,sequence,x,y)
  return {token,1,token,x or 300,y or 200,10,pressure,6,flash>0 and 0.9 or 0,0,flash,sequence or 0,0,1000+token}
@@ -82,8 +84,12 @@ local function api(options)
  return {
   number=function(key,fallback) if options and options[key]~=nil then return options[key] end;return fallback end,
   valid=function(object) return object and object:IsValid() end,
-  bridge=function(operation,index)
-   if operation==18 then if customSound then if index==1 then customHits=customHits+1 else customRequests=customRequests+1 end;return 1 end;return 0 end
+  bridge=function(operation,index,gain)
+   if operation==18 then
+    lastGain=gain
+    if not customSound then sounds=sounds+1 elseif index==1 then customHits=customHits+1 else customRequests=customRequests+1 end
+    return 1
+   end
    if operation==15 then if missing then return nil end;return #entries,generation,now end
    check(operation==16 and index>=1 and index<=3);reads=reads+1;return table.unpack(entries[index])
   end,
@@ -119,7 +125,7 @@ entries={row(1,0,1.2,1)}
 feedback:update(parent,hud)
 check(panel.label.text=='GUARD BROKEN' and panel.tint=='flash' and panel.icons[1].clip.visible==1)
 check(panel.icons[1].left.visible==4 and panel.icons[1].right.visible==4 and panel.root.scale.X>1)
-check(sounds==1 and sound.position.Z==10)
+check(sounds==1 and near(lastGain,0.4) and panel.backdrop==nil)
 now=1.05;feedback:update(parent,hud);check(sounds==1)
 entries[1][12]=2;now=1.1;feedback:update(parent,hud);check(sounds==1)
 now=1.3;feedback:update(parent,hud);check(sounds==1) -- Rate-limited events are not replayed later.
@@ -154,6 +160,7 @@ entries={row(1,0,1.2,1)};now=0.1;feedback:update(parent,hud);check(sounds==befor
 local indicatorOnly=GuardFeedback.new(api({['guardpressure.showpressurebar']=0,['guardpressure.breaksound']=0}))
 indicatorOnly:update(parent,hud)
 check(indicatorOnly.pool[1].label.text=='GUARD BROKEN' and indicatorOnly.pool[1].shieldVisibility==1 and indicatorOnly.pool[1].count==1)
+check(indicatorOnly.pool[1].icons[1].left.visible==1 and indicatorOnly.pool[1].icons[1].empty.visible==1)
 entries={row(1,2,0)};indicatorOnly:update(parent,hud);check(indicatorOnly.pool[1].visible==1)
 local soundOnly=GuardFeedback.new(api({['guardpressure.showpressurebar']=0,['guardpressure.showbreakindicator']=0}))
 entries={row(1,0,1.2,2)};now=1;soundOnly:update(parent,hud)
@@ -202,6 +209,31 @@ entries={row(8,2,0)};entries[1][10]=0.15;entries[1][13]=4;now=3.4
 before=customHits;hitFeedback:update(parent,hud);check(customHits==before)
 entries[1][13]=5;now=3.7;hitFeedback:update(parent,hud);check(customHits==before+1)
 hitFeedback:reset();hitFeedback:update(parent,hud);check(customHits==before+1)
+local levels=GuardFeedback.new(api({['guardpressure.breakvolumepercent']=50,['guardpressure.hitvolumepercent']=25}))
+levels:playSound(false);check(near(lastGain,0.4))
+levels:playSound(true);check(near(lastGain,0.2))
+save.OptionData.Sound.SEVolume=20
+levels:playSound(true);check(near(lastGain,0.25))
+before=customHits;save.OptionData.Sound.SEVolume=0
+levels:playSound(true);check(customHits==before)
+save.OptionData.Sound.SEVolume=16
+local mutedHit=GuardFeedback.new(api({['guardpressure.hitvolumepercent']=0}))
+mutedHit:playSound(true);check(customHits==before)
+local diagnosticApi=api({['general.liveevidence']=1})
+local evidence={}
+diagnosticApi.log=function(message) evidence[#evidence+1]=message end
+local diagnostic=GuardFeedback.new(diagnosticApi)
+diagnostic:playSound(false)
+check(table.concat(evidence,'\n'):find('slider=16/20 cap=50.0% gain=0.4000 result=playback-accepted',1,true)~=nil)
+local logged=#evidence
+diagnostic:playSound(false);check(#evidence==logged)
+save.OptionData.Sound.SEVolume=0
+diagnostic:playSound(false);check(evidence[#evidence]:find('result=slider-muted',1,true)~=nil)
+save.OptionData.Sound.SEVolume=16
+diagnostic.hitVolume=0
+diagnostic:playSound(true);check(evidence[#evidence]:find('result=cap-muted',1,true)~=nil)
+diagnostic.liveEvidence=false
+logged=#evidence;diagnostic:playSound(true);check(#evidence==logged)
 local failingApi=api()
 local createdRoots={}
 local construct=failingApi.construct

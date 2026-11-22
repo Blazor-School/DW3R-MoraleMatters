@@ -4,7 +4,6 @@ local GuardFeedback = {}
 GuardFeedback.__index = GuardFeedback
 local WIDTH, HEIGHT, ICON, ICON_HEIGHT, STEP, MAX_SHIELDS = 200, 84, 24, 28, 28, 6
 local colors = {
-    backdrop={R=0.008,G=0.012,B=0.02,A=0.72},
     pressure={R=1,G=0.76,B=0.26,A=1},
     strained={R=1,G=0.39,B=0.12,A=1},
     flash={R=1,G=1,B=0.94,A=1},
@@ -18,7 +17,11 @@ function GuardFeedback.new(api)
     self.bar = api.number("guardpressure.showpressurebar",1,0,1)==1
     self.indicator = api.number("guardpressure.showbreakindicator",1,0,1)==1
     self.sound = api.number("guardpressure.breaksound",1,0,1)==1
+    self.liveEvidence = api.number("general.liveevidence",0,0,1)==1
+    self.breakVolume = api.number("guardpressure.breakvolumepercent",50,0,100)/100
+    self.hitVolume = api.number("guardpressure.hitvolumepercent",50,0,100)/100
     self.duration = api.number("guardpressure.indicatorseconds",1.2,0.3,3)
+    if self.liveEvidence then api.log(string.format("Live evidence: guard feedback settings shields=%s indicator=%s sound=%s breakCap=%.1f%% hitCap=%.1f%% backdrop=false",tostring(self.bar),tostring(self.indicator),tostring(self.sound),self.breakVolume*100,self.hitVolume*100)) end
     return self
 end
 
@@ -31,6 +34,7 @@ function GuardFeedback:reset()
     self:hide()
     for _, panel in pairs(self.pool) do if self.api.valid(panel.root) then panel.root:RemoveFromParent() end end
     self.pool,self.parent = {},nil
+    self.soundEvidence,self.soundEvidenceCount = {},0
 end
 
 function GuardFeedback:panel(index, parent, hud)
@@ -47,12 +51,11 @@ function GuardFeedback:panel(index, parent, hud)
     local ok, created = pcall(function()
         local slot = self.api.place(parent,root,0,0,WIDTH,HEIGHT)
         root:SetRenderTransformPivot({X=0.5,Y=0.5})
-        local backdrop,backdropSlot = self.api.makeImage(root,0,4,WIDTH,36,colors.backdrop)
         local label = self.api.makeText(root,0,54,WIDTH,28,18)
         label:SetJustification(1)
         label:SetShadowOffset({X=2,Y=2})
         label:SetShadowColorAndOpacity({R=0,G=0,B=0,A=1})
-        panel = {root=root,slot=slot,parent=parent:GetAddress(),backdrop=backdrop,backdropSlot=backdropSlot,label=label,icons={}}
+        panel = {root=root,slot=slot,parent=parent:GetAddress(),label=label,icons={}}
         local function image(parent, texture)
             local widget, imageSlot = self.api.makeImage(parent,0,0,ICON,ICON_HEIGHT,colors.white)
             widget:SetBrushFromTexture(texture,false)
@@ -83,7 +86,6 @@ function GuardFeedback:render(panel, fraction, threshold, broken, hitFlash, brea
     local rowWidth = count*STEP-(STEP-ICON)
     local start = (WIDTH-rowWidth)/2
     if panel.count~=count then
-        panel.backdropSlot:SetPosition({X=start-8,Y=4});panel.backdropSlot:SetSize({X=rowWidth+16,Y=36})
         for index,icon in ipairs(panel.icons) do
             icon.slot:SetPosition({X=start+(index-1)*STEP,Y=8})
             self.api.visibility(icon.root,icon,index<=count and 4 or 1)
@@ -99,10 +101,10 @@ function GuardFeedback:render(panel, fraction, threshold, broken, hitFlash, brea
         local icon = panel.icons[index]
         local remaining = math.max(0,math.min(1,(1-fraction)*count-(index-1)))
         if icon.remaining~=remaining then icon.clipSlot:SetSize({X=ICON*remaining,Y=ICON_HEIGHT});icon.remaining=remaining end
-        if icon.broken~=broken then
-            icon.empty:SetVisibility(broken and 1 or 4);icon.clip:SetVisibility(broken and 1 or 4)
-            icon.left:SetVisibility(broken and 4 or 1);icon.right:SetVisibility(broken and 4 or 1)
-            icon.broken=broken
+        if icon.broken~=broken or icon.showShields~=showShields then
+            icon.empty:SetVisibility(showShields and not broken and 4 or 1);icon.clip:SetVisibility(showShields and not broken and 4 or 1)
+            icon.left:SetVisibility(showShields and broken and 4 or 1);icon.right:SetVisibility(showShields and broken and 4 or 1)
+            icon.broken,icon.showShields=broken,showShields
         end
         if icon.tint~=tint then
             icon.fill:SetColorAndOpacity(colors[tint]);icon.left:SetColorAndOpacity(colors[tint]);icon.right:SetColorAndOpacity(colors[tint])
@@ -192,21 +194,34 @@ function GuardFeedback:anchor(objectIndex)
     return result
 end
 
-function GuardFeedback:playSound(position, hit)
-    if self.api.bridge(18,hit and 1 or 0)==1 then
+function GuardFeedback:logSound(hit,slider,gain,result)
+    if not self.liveEvidence then return end
+    local kind=hit and "hit" or "break"
+    local cap=hit and self.hitVolume or self.breakVolume
+    local state=string.format("slider=%s/20 cap=%.1f%% gain=%.4f result=%s",tostring(slider),cap*100,gain,result)
+    self.soundEvidence=self.soundEvidence or {}
+    if self.soundEvidence[kind]==state or (self.soundEvidenceCount or 0)>=128 then return end
+    self.soundEvidence[kind]=state
+    self.soundEvidenceCount=(self.soundEvidenceCount or 0)+1
+    self.api.log("Live evidence: guard sound "..kind.." "..state)
+    if self.soundEvidenceCount==128 then self.api.log("Live evidence: guard sound detail limit reached for this battle (128 changes).") end
+end
+
+function GuardFeedback:playSound(hit)
+    local cap = hit and self.hitVolume or self.breakVolume
+    if cap<=0 then self:logSound(hit,"unread",0,"cap-muted");return end
+    if not self.api.valid(self.saveManager) then self.saveManager=FindFirstOf("SaveDataManager") end
+    local save = self.api.valid(self.saveManager) and self.saveManager.GameStatusSaveGame
+    if not self.api.valid(save) then self:logSound(hit,"unavailable",0,"save-unavailable");return end
+    -- DT_OptionData defines 21 Sound Effects steps, from 0 through 20.
+    local slider = save.OptionData.Sound.SEVolume
+    if not finite(slider) or slider<=0 then self:logSound(hit,slider,0,finite(slider) and "slider-muted" or "invalid-slider");return end
+    local gain=cap*math.min(1,slider/20)
+    local accepted=self.api.bridge(18,hit and 1 or 0,gain)==1
+    self:logSound(hit,slider,gain,accepted and "playback-accepted" or "playback-failed-or-busy")
+    if accepted then
         local key = hit and "hitSoundReady" or "soundReady"
         if not self[key] then self[key]=true;self.api.log((hit and "Guard-hit" or "Guard-break").." sound requested: Origins reference clip sample (2D).") end
-        return
-    end
-    if hit then return end -- The game already plays its normal blocked-hit impact.
-    if not self.api.valid(self.soundManager) then self.soundManager = FindFirstOf("SoundManager") end
-    if not self.api.valid(self.soundManager) then return end
-    -- Existing native deflection impact, spatialized at the broken guard.
-    local ok, message = pcall(function() self.soundManager:PlayRepelSE(true,position) end)
-    if ok and not self.soundReady then self.soundReady=true;self.api.log("Guard-break sound requested through native SoundManager.") end
-    if not ok and not self.soundWarning then
-        self.soundWarning = true
-        self.api.log("Guard-break sound unavailable: "..tostring(message))
     end
 end
 
@@ -220,12 +235,13 @@ function GuardFeedback:update(parent, hud)
     if self.generation~=generation then
         self:hide()
         self.generation,self.lastSequence,self.lastHitSequence,self.lastSoundAt,self.lastBreakAt = generation,0,0,-math.huge,-math.huge
+        self.soundEvidence,self.soundEvidenceCount = {},0
     end
     count = math.max(0,math.min(3,count))
     now = finite(now) and now or 0
     local activeNames = {}
-    local newest,soundPosition,soundSequence = self.lastSequence,nil,0
-    local newestHit,hitPosition,hitSequence = self.lastHitSequence,nil,0
+    local newest,soundSequence = self.lastSequence,0
+    local newestHit,hitSequence = self.lastHitSequence,0
     for index=1,count do
         local token,group,member,x,y,z,pressure,threshold,opening,hitFlash,breakFlash,sequence,touch,objectIndex,refilled = self.api.bridge(16,index)
         local anchor
@@ -236,12 +252,12 @@ function GuardFeedback:update(parent, hud)
         local breakActive = finite(breakFlash) and breakFlash>0
         if finite(touch) then
             newestHit = math.max(newestHit,touch)
-            if anchor and not broken and (hitFlash or 0)>0 and touch>self.lastHitSequence and touch>hitSequence then hitPosition,hitSequence={X=x,Y=y,Z=z},touch end
+            if anchor and not broken and (hitFlash or 0)>0 and touch>self.lastHitSequence then hitSequence=math.max(hitSequence,touch) end
         end
         if finite(sequence) then
             newest = math.max(newest,sequence)
             if anchor and breakActive and sequence>self.lastSequence and sequence>soundSequence then
-                soundPosition,soundSequence = {X=x,Y=y,Z=z},sequence
+                soundSequence = sequence
             end
         end
         local showBar = anchor and self.bar and (pressure>0 or broken or breakActive or refilled==1)
@@ -260,10 +276,12 @@ function GuardFeedback:update(parent, hud)
     end
     self:restoreNames(activeNames)
     for index=count+1,3 do if self.pool[index] then self.api.visibility(self.pool[index].root,self.pool[index],1) end end
-    if self.sound and soundPosition and now-self.lastBreakAt>=0.15 then
-        self:playSound(soundPosition,false);self.lastSoundAt,self.lastBreakAt=now,now
-    elseif self.sound and hitPosition and now-self.lastSoundAt>=0.10 and now-self.lastBreakAt>=0.40 then
-        self:playSound(hitPosition,true);self.lastSoundAt=now
+    if self.sound and soundSequence>0 and self.breakVolume<=0 then self:logSound(false,"unread",0,"cap-muted") end
+    if self.sound and hitSequence>0 and self.hitVolume<=0 then self:logSound(true,"unread",0,"cap-muted") end
+    if self.sound and self.breakVolume>0 and soundSequence>0 and now-self.lastBreakAt>=0.15 then
+        self:playSound(false);self.lastSoundAt,self.lastBreakAt=now,now
+    elseif self.sound and self.hitVolume>0 and hitSequence>0 and now-self.lastSoundAt>=0.10 and now-self.lastBreakAt>=0.40 then
+        self:playSound(true);self.lastSoundAt=now
     end
     self.lastSequence,self.lastHitSequence = newest,newestHit
 end

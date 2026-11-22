@@ -114,6 +114,9 @@ static bool SelectRandomArcherTarget(void* controller, void* owner)
             ArcherInRange(controller, candidate); // Restore this actor's distance/pitch after scanning.
             At<int>(controller, 0x408) = At<int>(candidate, 0x7A0);
             search.retry = 0;
+            static volatile LONG evidence = 0;
+            if (SampleLiveEvidence(evidence))
+                Log("Live evidence: archer target acquired group=%d targetGroup=%d player=%d.", GroupIdFromCharacter(owner), GroupIdFromCharacter(candidate), At<uint8_t>(candidate, 0x74C) < 2);
             return true;
         }
     }
@@ -174,6 +177,9 @@ extern "C" float MoraleMattersArcherDamage(void* component, float damage, void* 
     caller->xmm6[0] = adjusted;
     *caller->storedDamage = adjusted;
     caller->zeroDamage = Config.archerDamageTaken == 0;
+    static volatile LONG evidence = 0;
+    if (damage > 0 && SampleLiveEvidence(evidence))
+        Log("Live evidence: archer damage group=%d before=%.2f after=%.2f multiplier=%.2f.", GroupIdFromCharacter(defender), damage, adjusted, Config.archerDamageTaken);
     return adjusted;
 }
 extern "C" bool ArcherHit(void*, void*, float, float, uint8_t, bool, bool*);

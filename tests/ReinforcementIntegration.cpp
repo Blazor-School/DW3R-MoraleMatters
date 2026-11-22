@@ -138,6 +138,24 @@ int main(int argc, char** argv)
     CHECK(ProbeSpecialEntry(Group(2), 0) == 1);
     CHECK(At<uint8_t>(Group(2), 0x2DFD) == 0);
     CHECK(Arrivals[2].pending);
+    const uint8_t reserveAttributes[] = {2, 1};
+    for (uint8_t attribute : reserveAttributes)
+    {
+        Setup();
+        void* reserve = Group(2);
+        At<uint8_t>(reserve, 0x2DFD) = attribute;
+        At<uint8_t>(reserve, 0x186) = 1;
+        ResetBattle(ManagerMemory);
+        CHECK(!Arrivals[2].seen);
+        At<uint8_t>(reserve, 0x192) = 1; // Native spawn sets this before clearing the special attribute.
+        SpecialAttribute(reserve, 0);
+        Advance(0, 1);
+        CHECK(Arrivals[2].pending && Near(Corps[0].base, 400));
+        At<uint8_t>(reserve, 0x186) = 0; // The native spawn clears inactivity after the callback.
+        Advance(0, 3);
+        CHECK(!Arrivals[2].pending && Reinforcements[0].arrivedSoldiers == 5);
+        CHECK(Near(Corps[0].base, attribute == 1 ? 899 : 425));
+    }
     Setup();
     void* corps = CorpsObject(0);
     CHECK(CorpsSoldiers(0) == 20);

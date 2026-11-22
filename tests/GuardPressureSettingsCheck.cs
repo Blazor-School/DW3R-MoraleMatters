@@ -13,7 +13,7 @@ void Check(bool condition, string message)
 
 CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
 var properties = typeof(ModSettingForm).GetProperties().Where(property => property.Name.StartsWith("GuardPressure", StringComparison.Ordinal)).ToArray();
-Check(properties.Length == 19, "All guard settings are represented.");
+Check(properties.Length == 21, "All guard settings are represented.");
 var service = new ModService(new VelopackLogger(NullLogger<VelopackLogger>.Instance));
 string folder = Path.Combine(Path.GetTempPath(), "MoraleMatters-guard-settings-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(folder);
@@ -55,6 +55,15 @@ try
     loaded = new ModSettingForm();
     loaded.LoadModSettings(folder);
     foreach (var property in properties) Check(Equals(property.GetValue(defaults), property.GetValue(loaded)), property.Name + " old INI fallback");
+    var gameFolder = new GameFolderForm { GamePath = folder };
+    Check(!Validator.TryValidateObject(gameFolder, new ValidationContext(gameFolder), null, true), "A folder without a game executable is rejected");
+    foreach (string executable in new[] { "DW3CE_RE-Win64-Shipping.exe", "DW3CE_RE-Win64-Shipping.tnk.exe" })
+    {
+        string path = Path.Combine(folder, executable);
+        File.WriteAllText(path, "");
+        Check(Validator.TryValidateObject(gameFolder, new ValidationContext(gameFolder), null, true), $"A folder containing only {executable} is accepted");
+        File.Delete(path);
+    }
     Check(await service.GetLocalModVersionAsync(Path.Combine(root, "package/DW3CE_RE/Binaries/Win64")) == "1.9.0", "Packaged ASI recognized as 1.9.0");
     Console.WriteLine($"Guard pressure UI settings: {assertions} assertions passed.");
 }

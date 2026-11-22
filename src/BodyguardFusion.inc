@@ -3,6 +3,8 @@ static SelectEquipmentFn OriginalSelectEquipment = nullptr;
 static void* BodyguardInventoryPicker = nullptr;
 static constexpr uint8_t WeaponFusionEquipmentIndex = 2;
 static constexpr uint8_t BodyguardFusionEquipmentIndex = 7;
+using EquipmentFocusFn = void (*)(void*, uint8_t);
+static EquipmentFocusFn OriginalEquipmentFocus = nullptr;
 
 static size_t EquipmentMenuOffset(size_t legacyOffset)
 {
@@ -16,6 +18,21 @@ static void* EquipmentMenu(void* manager)
     if (!Readable(common, 0x358)) return nullptr;
     void* menu = At<void*>(common, 0x350);
     return Readable(menu, EquipmentMenuOffset(0x390) + sizeof(uint8_t)) && At<void*>(menu, EquipmentMenuOffset(0x378)) == manager ? menu : nullptr;
+}
+
+static void EquipmentFocus(void* menu, uint8_t index)
+{
+    if (Config.enabled && Config.weaponFusion && index == WeaponFusionEquipmentIndex && GuardFusionSelector && Readable(menu, EquipmentMenuOffset(0x390) + sizeof(uint8_t)))
+    {
+        void* manager = At<void*>(menu, EquipmentMenuOffset(0x378));
+        if (EquipmentMenu(manager) == menu && At<void*>(manager, 0x470) == GuardFusionSelector && At<FusionArray>(menu, EquipmentMenuOffset(0x380)).count == BodyguardFusionEquipmentIndex + 1)
+        {
+            index = BodyguardFusionEquipmentIndex;
+            if (Config.liveEvidence) Log("Live evidence: bodyguard fusion initial return focus=%u.", static_cast<unsigned>(index));
+        }
+    }
+    // Choose the destination before native selection, focus and animation run.
+    OriginalEquipmentFocus(menu, index);
 }
 
 bool BodyguardFusionAvailable()
@@ -66,6 +83,10 @@ static bool SelectEquipment(void* manager, uint8_t index)
         At<uint8_t>(menu, EquipmentMenuOffset(0x390)) = index;
     }
     const bool opened = OriginalSelectEquipment(manager, index);
+    // The stock transition opens fusion under index 2. The equipment menu
+    // reads its saved selection when the picker closes.
+    if (bodyguards && EquipmentMenu(manager) == menu)
+        At<uint8_t>(menu, EquipmentMenuOffset(0x390)) = BodyguardFusionEquipmentIndex;
     if (opened && Readable(selector, 0x488) && (bodyguards || restoreOfficerList))
     {
         // A reused picker can retain the previous inventory for this officer.

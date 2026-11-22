@@ -25,17 +25,24 @@ namespace
         {"b57a2d4cbd01c9c5abd651fa42f43a4b8fdae88da6403106cd5f5c1bf4dade70", 0x0B39E000, MoraleMatters::GameBuild::Legacy},
         {"ca1a65a53242a7cf42493bd2006b8c555d87597387468e4b7a07c52d4eefe92e", 0x0B3D8000, MoraleMatters::GameBuild::Legacy},
         {"8a3644a0e002ece5867c2f49720a4ed05900af7e09d10d39f8404b6086382849", 0x0B3C9000, MoraleMatters::GameBuild::Patch110},
+        {"b6c1023db00b858927d4eeb2a71f8bfc42a3f55ef3ab2aebf3c5f4ec75e390bc", 0x0B403000, MoraleMatters::GameBuild::Patch110},
     };
 
-    const SupportedExecutable* FindSupportedExecutable(const char* hash)
+#include "HashExecutable.inc"
+
+    const SupportedExecutable* FindSupportedExecutable(const wchar_t* path)
     {
+        const wchar_t* name = wcsrchr(path, L'\\');
+        if (!name || (_wcsicmp(name + 1, L"DW3CE_RE-Win64-Shipping.exe") != 0 && _wcsicmp(name + 1, L"DW3CE_RE-Win64-Shipping.tnk.exe") != 0))
+            return nullptr;
+        char hash[65];
+        if (!HashExecutable(path, hash))
+            return nullptr;
         for (const auto& executable : SupportedExecutables)
             if (strcmp(hash, executable.sha256) == 0)
                 return &executable;
         return nullptr;
     }
-
-#include "HashExecutable.inc"
 
     bool Boolean(const wchar_t* section, const wchar_t* key, bool fallback)
     {
@@ -57,6 +64,7 @@ namespace
     {
         using namespace MoraleMatters;
         Config.enabled = Boolean(L"General", L"Enabled", true);
+        Config.liveEvidence = Boolean(L"General", L"LiveEvidence", false);
         Config.offscreen = Boolean(L"Offscreen", L"Enabled", true);
         Config.support = Boolean(L"Support", L"Enabled", true);
         Config.casualties = Boolean(L"Casualties", L"Enabled", true);
@@ -212,9 +220,7 @@ namespace
         wchar_t executable[32768];
         if (!GetModuleFileNameW(nullptr, executable, 32768))
             return 0;
-        const wchar_t* name = wcsrchr(executable, L'\\');
-        char hash[65];
-        const auto* supported = name && _wcsicmp(name + 1, L"DW3CE_RE-Win64-Shipping.exe") == 0 && HashExecutable(executable, hash) ? FindSupportedExecutable(hash) : nullptr;
+        const auto* supported = FindSupportedExecutable(executable);
         if (!supported)
         {
             Log("NOT APPLIED: unsupported host or executable SHA-256. No game hooks installed.");

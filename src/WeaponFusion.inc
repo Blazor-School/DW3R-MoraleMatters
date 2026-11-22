@@ -86,8 +86,17 @@ static void WeaponFusionSelect(void* widget)
     // Native undo, duplicate-skill validation and final save/consumption stay intact.
     WeaponFusionTile preview[9];
     memcpy(preview, source, sourceCount * sizeof(WeaponFusionTile));
+    const auto donor = preview[sourceIndex];
+    const int original = destination[destinationIndex].value;
+    const bool bodyguard = widget == GuardFusionWidget;
     preview[sourceIndex].value = value;
     At<WeaponFusionTile*>(widget, 0x3A8) = preview;
     OriginalWeaponFusionSelect(widget);
     At<WeaponFusionTile*>(widget, 0x3A8) = source;
+    if (Config.liveEvidence)
+    {
+        const auto& result = At<FusionArray>(widget, 0x3D8);
+        if (FusionArrayReadable(result, sizeof(WeaponFusionTile), 9) && destinationIndex < result.count)
+            Log("Live evidence: %s fusion selection skill=%u donor=%d original=%d requested=%d actual=%d.", bodyguard ? "bodyguard" : "officer", static_cast<unsigned>(donor.item), donor.value, original, value, static_cast<WeaponFusionTile*>(result.data)[destinationIndex].value);
+    }
 }

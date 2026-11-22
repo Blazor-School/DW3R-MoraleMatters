@@ -9,17 +9,19 @@ local now, phase = 0, 0
 local function valid() return true end
 local function no() return false end
 local function actor(id, excluded)
-    local a={id=id,excluded=excluded,x=600,y=0,hp=100,hit=false,yaw=180,bUseControllerRotationYaw=true}
+    local a={id=id,excluded=excluded,x=600,y=0,z=100,hp=100,hit=false,yaw=180,bUseControllerRotationYaw=true}
     local weapon={IsValid=valid,bHiddenInGame=false}
     function weapon:GetAddress() return id end
     function weapon:SetHiddenInGame(value) assert(a.disarmed); self.bHiddenInGame=value end
     local movement={IsValid=valid,MovementMode=2,MaxWalkSpeed=450,bUseControllerDesiredRotation=true,
-        bOrientRotationToMovement=false,RotationRate={Pitch=0,Yaw=360,Roll=0}}
-    function movement:DisableMovement() self.MovementMode=0 end
-    function movement:SetMovementMode(mode) self.MovementMode=mode end
+        bOrientRotationToMovement=false,RotationRate={Pitch=0,Yaw=360,Roll=0},bAlwaysCheckFloor=false,
+        bProjectNavMeshWalking=false,bSweepWhileNavWalking=false,NavMeshProjectionInterval=0.3,NavMeshProjectionInterpSpeed=12,
+        NavMeshProjectionHeightScaleUp=0.67,NavMeshProjectionHeightScaleDown=1,MaxStepHeight=45}
     function movement:StopMovementImmediately() self.braked=true end
+    function movement:SetMovementMode() error('Custom infantry must preserve the native movement mode') end
     a.Mesh={IsValid=valid,WasRecentlyRendered=function() return not a.offscreen end}
     a.CharacterMovement=movement
+    a.CapsuleComponent={IsValid=valid,GetScaledCapsuleHalfHeight=function() return 88 end}
     a.WeaponComponents={weapon}
     a.IsValid,a.IsUnitized,a.IsDead=valid,valid,no
     a.IsNowDamageMotion=no
@@ -27,6 +29,7 @@ local function actor(id, excluded)
     function a:IsNowRideMotion() return self.mounting end
     function a:IsNowAttack() return self.attack end
     function a:IsNowHit() return self.hit end
+    function a:IsNoHit() return self.noHit end
     function a:GetHealth() return self.hp end
     function a:GetPrevHealth() return 100 end
     function a:GetLastAttackedMeCharacter() return self.attacker end
@@ -38,7 +41,14 @@ local function actor(id, excluded)
     end
     function a:ConsumeMovementInputVector() self.inputX,self.inputY=0,0 end
     function a:GetVelocity() return {X=self.velocityX or 0,Y=self.velocityY or 0,Z=0} end
-    function a:K2_GetActorLocation() return {X=self.x,Y=self.y,Z=0} end
+    function a:K2_GetActorLocation() return {X=self.x,Y=self.y,Z=self.z} end
+    function a:K2_SetActorLocation(position,sweep,hit,teleport)
+        assert(sweep and not teleport and type(hit)=='table')
+        assert((movement.MovementMode==1 or movement.MovementMode==2) and not self.noHit and not self.hit)
+        self.x,self.y,self.z=position.X,position.Y,position.Z
+        self.groundCorrections=(self.groundCorrections or 0)+1
+        return true
+    end
     function a:K2_GetActorRotation() return {Yaw=self.yaw} end
     function a:K2_SetActorRotation(rotation) self.yaw=rotation.Yaw end
     return a
@@ -121,13 +131,23 @@ function StaticFindObject(name)
     end
     return {IsValid=valid,GetTimeSeconds=function() return now end}
 end
-local slump=Infantry.new(pose,bridge,error)
+local floorAvailable=true
+function FindFirstOf(name)
+    assert(name=='StageManager')
+    return {IsValid=valid,GetStageHeight=function() return {bBlockingHit=floorAvailable,ImpactPoint={Z=0}} end}
+end
+local evidence={}
+local function capture(message)
+    assert(message:find("Live evidence:",1,true),message)
+    evidence[#evidence+1]=message
+end
+local slump=Infantry.new(pose,bridge,capture,true)
 local groups={{side=1,corps=1,alive=true,x=600,y=0},{side=0,corps=2,alive=true,x=0,y=0}}
 local function advance(time)
     while now<time do
         now=now+0.04
         for _,a in ipairs(army) do
-            if a.lease and a.CharacterMovement.MovementMode==2 then
+            if a.lease and (a.CharacterMovement.MovementMode==1 or a.CharacterMovement.MovementMode==2) then
                 local speed=a.CharacterMovement.MaxWalkSpeed
                 a.velocityX,a.velocityY=speed*(a.inputX or 0),speed*(a.inputY or 0)
                 a.x,a.y=a.x+0.04*a.velocityX,a.y+0.04*a.velocityY
@@ -147,10 +167,13 @@ for id=1,10 do
     local a=army[id]
     assert(a.WeaponComponents[1].bHiddenInGame)
     if id==10 or (13+id)%4==0 then
-        assert(a.driven and a.CharacterMovement.MovementMode==0)
+        assert(a.driven and a.lease and a.CharacterMovement.MovementMode==2 and a.CharacterMovement.MaxWalkSpeed==0)
     else
         assert(a.driven and a.track=="sprint" and a.lease and a.inputX>0 and a.CharacterMovement.MaxWalkSpeed==780)
     end
+    assert(a.CharacterMovement.MovementMode==2 and a.CharacterMovement.bAlwaysCheckFloor and a.CharacterMovement.bProjectNavMeshWalking)
+    assert(a.CharacterMovement.bSweepWhileNavWalking and a.CharacterMovement.NavMeshProjectionInterval==0.1)
+    assert(math.abs(a.z-88)<0.001 and a.groundCorrections==1)
 end
 local runner=army[1]
 assert(army[2].requests==2)
@@ -164,8 +187,16 @@ end
 local struck=army[3]
 advance(5)
 assert(struck.driven and struck.track=="hold" and struck.started==1)
-assert(runner.driven and runner.track=="cower" and runner.x>=2800 and not runner.lease and runner.arrivals==1)
+assert(runner.driven and runner.track=="cower" and runner.x>=2800 and runner.lease and runner.arrivals==1)
 assert(army[10].track=="cower" and army[10].x==600 and not army[10].arrivals)
+local seatedYaw,cowerYaw=struck.yaw,runner.yaw
+for _,a in ipairs({struck,runner}) do
+    assert(not a.bUseControllerRotationYaw and not a.CharacterMovement.bUseControllerDesiredRotation and not a.CharacterMovement.bOrientRotationToMovement)
+    assert(a.CharacterMovement.RotationRate.Yaw==0)
+    a.yaw=a.yaw+90 -- A native AI turn must not change an active seated pose's facing.
+end
+advance(5.2)
+assert(struck.yaw==seatedYaw and runner.yaw==cowerYaw)
 local seatedPosition=struck.x
 local seatedY=struck.y
 runner.driven=false
@@ -181,7 +212,9 @@ attacker.x=seatedPosition+100
 struck.attacker=attacker
 struck.hit,struck.hp=true,90
 advance(6.02)
-assert(not struck.driven and struck.track=="hold" and struck.WeaponComponents[1].bHiddenInGame)
+assert(not struck.driven and struck.track=="hold" and struck.WeaponComponents[1].bHiddenInGame and struck.CharacterMovement.MaxWalkSpeed==450)
+assert(struck.CharacterMovement.MovementMode==2 and not struck.CharacterMovement.bAlwaysCheckFloor)
+assert(struck.bUseControllerRotationYaw and struck.CharacterMovement.bUseControllerDesiredRotation and struck.CharacterMovement.RotationRate.Yaw==360)
 advance(6.48)
 assert(not struck.driven and not struck.lease)
 struck.hit=false
@@ -213,16 +246,20 @@ for id=1,10 do
     local a=army[id]
     assert(not a.driven and not a.lease and not a.disarmed and not a.WeaponComponents[1].bHiddenInGame)
     assert(a.CharacterMovement.MovementMode==2 and a.CharacterMovement.MaxWalkSpeed==450)
+    assert(not a.CharacterMovement.bAlwaysCheckFloor)
+    assert(not a.CharacterMovement.bProjectNavMeshWalking and not a.CharacterMovement.bSweepWhileNavWalking)
+    assert(a.CharacterMovement.NavMeshProjectionInterval==0.3 and a.CharacterMovement.NavMeshProjectionInterpSpeed==12 and a.CharacterMovement.NavMeshProjectionHeightScaleUp==0.67)
     assert(a.bUseControllerRotationYaw and a.CharacterMovement.bUseControllerDesiredRotation)
     assert(not a.CharacterMovement.bOrientRotationToMovement and a.CharacterMovement.RotationRate.Yaw==360)
 end
 phase=4
 advance(19)
-assert(struck.CharacterMovement.MovementMode==0)
+assert(struck.CharacterMovement.MovementMode==2 and struck.CharacterMovement.MaxWalkSpeed==0)
 struck.riding=true
+struck.CharacterMovement.MovementMode=6
 advance(19.3)
 assert(not struck.driven and not struck.lease and not struck.disarmed and not struck.WeaponComponents[1].bHiddenInGame)
-assert(struck.CharacterMovement.MovementMode==0) -- Mount movement stays engine-controlled.
+assert(struck.CharacterMovement.MovementMode==6) -- Mount movement stays engine-controlled.
 struck.riding=false
 struck.CharacterMovement.MovementMode=2
 advance(20.2)
@@ -232,6 +269,32 @@ assert(not struck.driven and not struck.WeaponComponents[1].bHiddenInGame)
 pose.available=false
 advance(21)
 assert(not struck.driven and not struck.WeaponComponents[1].bHiddenInGame)
+pose.available=true
+advance(23)
+assert(struck.driven)
+-- Mounted knockback can start native recovery without changing health.
+struck.CharacterMovement.MovementMode,struck.noHit=3,true
+advance(23.35)
+assert(not struck.driven and not struck.lease and struck.CharacterMovement.MovementMode==3 and struck.CharacterMovement.MaxWalkSpeed==450)
+struck.CharacterMovement.MovementMode=2
+advance(23.65)
+assert(not struck.driven and not struck.lease)
+struck.noHit=false
+advance(24.1)
+assert(struck.driven and struck.CharacterMovement.MovementMode==2 and struck.CharacterMovement.bAlwaysCheckFloor)
+floorAvailable=false;struck.z=110
+advance(24.4)
+assert(struck.z==110) -- Missing collision must not move the capsule.
+floorAvailable=true;struck.z=1000
+advance(24.7)
+assert(struck.z==1000) -- Do not snap onto a distant lower storey.
+struck.z=100
+advance(25)
+assert(struck.z==88)
+local logged=table.concat(evidence,"\n")
+assert(logged:find("infantry damage",1,true) and logged:find("hp=100.0->90.0",1,true))
+assert(logged:find("yield to native reaction",1,true) and logged:find("noHit=true",1,true))
+assert(logged:find("native reaction ended",1,true) and logged:find("noHit=false",1,true))
 print("Corps infantry Lua lifecycle passed for sprint, turn, cower, seated hold, rally, exclusions and cleanup.")
 """, str(root / "Scripts" / "InfantrySlump.lua"))
 

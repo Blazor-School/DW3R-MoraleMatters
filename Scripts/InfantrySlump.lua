@@ -8,6 +8,9 @@ local function valid(o) return o and o:IsValid() end
 local function reactingToHit(actor)
     return actor:IsNowHit() or actor:IsNowDamageMotion()
 end
+local function grounded(movement)
+    return movement.MovementMode==1 or movement.MovementMode==2
+end
 local function mounted(actor)
     return actor:IsRiding() or actor:IsNowRideMotion()
 end
@@ -15,22 +18,124 @@ local function planarSquared(a,b)
     return (a.X-b.X)^2+(a.Y-b.Y)^2
 end
 
-function InfantrySlump.new(pose,bridge,log)
+function InfantrySlump.new(pose,bridge,log,liveEvidence)
     local active, retry, threats, observedHits = {},{},{},{}
     local context, generation, clock, nextScan
-    local gameplay,navigation,poseStartsRemaining,riseStartsRemaining,flightStartsRemaining
+    local gameplay,navigation,stage,poseStartsRemaining,riseStartsRemaining,flightStartsRemaining
     local order,firstRow={},1
+    local logged={}
+    local evidenceCount=0
+    local function logSoldier(row,event,detail)
+        if not liveEvidence or evidenceCount>=320 then return end
+        evidenceCount=evidenceCount+1
+        log(string.format("Live evidence: infantry %s generation=%s group=%d member=%d object=%s style=%s %s",event,tostring(generation),row.id,row.member,tostring(row.object),tostring(row.style or "flight"),detail))
+        if evidenceCount==320 then log("Live evidence: infantry detail limit reached for this battle (320 events).") end
+    end
+    local function logPose(row,action)
+        if not liveEvidence or logged[action]==generation then return end
+        logged[action]=generation
+        log(string.format("Live evidence: infantry %s group=%d member=%d",action,row.id,row.member))
+    end
     local function cleanup(label,action)
         local ok,err=pcall(action)
         if not ok then log("Infantry "..label.." cleanup: "..tostring(err)) end
         return ok
     end
 
-    local function restoreMode(row)
-        if valid(row.movement) and row.movement.MovementMode==0 then row.movement:SetMovementMode(row.mode,0) end
+    local function releaseStationary(row)
+        if row.stationaryLease then
+            bridge(20,row.key,row.object,0)
+            row.stationaryLease=nil
+        end
+        if row.stationarySpeed and valid(row.movement) and row.movement.MaxWalkSpeed==0 then
+            row.movement.MaxWalkSpeed=row.stationarySpeed
+        end
+        row.stationarySpeed=nil
+        if row.stationaryRotation then
+            local original=row.stationaryRotation
+            if valid(row.actor) then row.actor.bUseControllerRotationYaw=original.controllerYaw end
+            if valid(row.movement) then
+                row.movement.bUseControllerDesiredRotation=original.desired
+                row.movement.bOrientRotationToMovement=original.orient
+                row.movement.RotationRate=original.rate
+            end
+            row.stationaryRotation=nil
+        end
     end
 
-    local function stopPath(row,riding)
+    local function releaseGround(row)
+        if row.ground and valid(row.movement) then
+            local movement,original=row.movement,row.ground
+            movement.bAlwaysCheckFloor=original.alwaysCheck
+            movement.bProjectNavMeshWalking=original.project
+            movement.bSweepWhileNavWalking=original.sweep
+            movement.NavMeshProjectionInterval=original.interval
+            movement.NavMeshProjectionInterpSpeed=original.interp
+            movement.NavMeshProjectionHeightScaleUp=original.up
+            movement.NavMeshProjectionHeightScaleDown=original.down
+        end
+        row.ground=nil
+    end
+
+    local function followGround(row,now)
+        local movement=row.movement
+        if not row.ground then
+            row.ground={alwaysCheck=movement.bAlwaysCheckFloor,project=movement.bProjectNavMeshWalking,sweep=movement.bSweepWhileNavWalking,
+                interval=movement.NavMeshProjectionInterval,interp=movement.NavMeshProjectionInterpSpeed,up=movement.NavMeshProjectionHeightScaleUp,down=movement.NavMeshProjectionHeightScaleDown}
+            logSoldier(row,"terrain projection enabled","native movement mode retained")
+        end
+        -- The game selects NavWalking each frame. Project that navigation height
+        -- onto collision geometry instead of repeatedly changing movement modes.
+        movement.bAlwaysCheckFloor=true
+        movement.bProjectNavMeshWalking=true
+        movement.bSweepWhileNavWalking=true
+        movement.NavMeshProjectionInterval=0.1
+        movement.NavMeshProjectionInterpSpeed=0
+        movement.NavMeshProjectionHeightScaleUp=1
+        movement.NavMeshProjectionHeightScaleDown=1
+        if row.ground.nextCheck and now<row.ground.nextCheck then return end
+        row.ground.nextCheck=now+0.12
+        if not valid(stage) then stage=FindFirstOf("StageManager") end
+        if not valid(stage) then return end
+        local actor=row.actor
+        local position=actor:K2_GetActorLocation()
+        local floor=stage:GetStageHeight(position)
+        if not floor.bBlockingHit or not valid(actor.CapsuleComponent) then return end
+        local halfHeight=actor.CapsuleComponent:GetScaledCapsuleHalfHeight()
+        local height=floor.ImpactPoint.Z+halfHeight+(movement.MovementMode==1 and 2.15 or 0)
+        local delta=height-position.Z
+        -- Correct navigation-height errors locally; a missing floor or a real
+        -- airborne reaction must never pull a soldier onto another level.
+        if math.abs(delta)>1 and math.abs(delta)<=halfHeight+movement.MaxStepHeight then
+            actor:K2_SetActorLocation({X=position.X,Y=position.Y,Z=height},true,{},false)
+            if not row.ground.logged then
+                row.ground.logged=true
+                logSoldier(row,"ground contact corrected",string.format("deltaZ=%.2f mode=%s",delta,tostring(movement.MovementMode)))
+            end
+        end
+    end
+
+    local function holdFacing(row)
+        local actor,movement=row.actor,row.movement
+        local original=row.stationaryRotation
+        if not original then
+            local rate=movement.RotationRate
+            original={controllerYaw=actor.bUseControllerRotationYaw,desired=movement.bUseControllerDesiredRotation,
+                orient=movement.bOrientRotationToMovement,rate={Pitch=rate.Pitch,Yaw=rate.Yaw,Roll=rate.Roll},yaw=actor:K2_GetActorRotation().Yaw}
+            row.stationaryRotation=original
+            logSoldier(row,"stationary facing locked",string.format("yaw=%.1f",original.yaw))
+        end
+        actor.bUseControllerRotationYaw=false
+        movement.bUseControllerDesiredRotation=false
+        movement.bOrientRotationToMovement=false
+        movement.RotationRate={Pitch=0,Yaw=0,Roll=0}
+        local yaw=actor:K2_GetActorRotation().Yaw
+        if math.abs((yaw-original.yaw+180)%360-180)>0.01 then
+            actor:K2_SetActorRotation({Pitch=0,Yaw=original.yaw,Roll=0},false)
+        end
+    end
+
+    local function stopPath(row,keepNativeMovement)
         local actor,movement=row.actor,row.movement
         if row.running then
             row.running=false
@@ -38,7 +143,7 @@ function InfantrySlump.new(pose,bridge,log)
             if valid(actor) and not actor:IsDead() then
                 actor:AddMovementInputKeep({X=0,Y=0,Z=0},0,0)
                 actor:ConsumeMovementInputVector()
-                if not riding then actor:StopAIMovement() end
+                if not keepNativeMovement then actor:StopAIMovement() end
             end
         end
         if row.rotation and valid(movement) then
@@ -59,7 +164,8 @@ function InfantrySlump.new(pose,bridge,log)
             local alive=valid(row.actor) and not row.actor:IsDead()
             local riding=alive and mounted(row.actor)
             stopPath(row,riding)
-            if alive and not riding then restoreMode(row) end
+            releaseStationary(row)
+            releaseGround(row)
         end)
         local restored=true
         for _,weapon in pairs(row.weapons) do
@@ -86,6 +192,7 @@ function InfantrySlump.new(pose,bridge,log)
         if epoch~=generation then
             clear()
             generation=epoch
+            evidenceCount=0
         end
         context={manager=manager,players=players,groups=groups}
     end
@@ -148,15 +255,21 @@ function InfantrySlump.new(pose,bridge,log)
         row.actor:StopAIMovement()
         row.actor:ConsumeMovementInputVector()
         row.movement:StopMovementImmediately()
-        row.movement:DisableMovement()
+        followGround(row,now)
+        -- Keep native floor checks and damage movement active while the soldier sits.
+        row.stationarySpeed=row.movement.MaxWalkSpeed
+        row.movement.MaxWalkSpeed=0
         row.style=style
         row.flightQueued=nil
         row.poseMode=nil
         row.poseStart,row.held=now,false
         row.rise,row.rebindAfter=nil,nil
-        row.hitVisibleAt=nil
         row.escape,row.path=nil,nil
         row.arriving=arriving
+        row.stationaryLease=bridge(20,row.key,row.object,1)==1
+        if not row.stationaryLease then return false end
+        row.stationaryLeaseUntil=now+0.1
+        holdFacing(row)
         return true
     end
 
@@ -213,6 +326,8 @@ function InfantrySlump.new(pose,bridge,log)
         flightStartsRemaining=flightStartsRemaining-1
         row.flightQueued=nil
         local actor,movement=row.actor,row.movement
+        releaseStationary(row)
+        followGround(row,now)
         local position=actor:K2_GetActorLocation()
         local distance,player=nearestPlayer(position)
         if not row.escape and distance>=cowerDistance^2 then return beginStationary(row,now,row.returnStyle) end
@@ -239,9 +354,9 @@ function InfantrySlump.new(pose,bridge,log)
         actor:StopAIMovement()
         actor:ConsumeMovementInputVector()
         movement:StopMovementImmediately()
-        restoreMode(row)
         movement.MaxWalkSpeed=row.sprintSpeed
         face(actor,position,row.path[1])
+        logPose(row,"flight")
         return true
     end
 
@@ -332,10 +447,10 @@ function InfantrySlump.new(pose,bridge,log)
                                 if group then reportHit(actor,group,now) end
                             end
                         end
-                        if remaining>0 and phase==4 and actor:IsUnitized() and not actor:IsDead() and not hit and not mounted(actor) and not actor:IsNowAttack() then
+                        if remaining>0 and phase==4 and actor:IsUnitized() and not actor:IsDead() and not hit and not mounted(actor) and not actor:IsNowAttack() and not actor:IsNoHit() then
                             local mesh,movement=actor.Mesh,actor.CharacterMovement
-                            if valid(mesh) and valid(movement) and (movement.MovementMode==1 or movement.MovementMode==2) then
-                                local row={key=key,actor=actor,mesh=mesh,movement=movement,mode=movement.MovementMode,id=id,member=member,object=object,weapons={},nextWeaponCheck=now+0.18}
+                            if valid(mesh) and valid(movement) and grounded(movement) then
+                                local row={key=key,actor=actor,mesh=mesh,movement=movement,id=id,member=member,object=object,weapons={},nextWeaponCheck=now+0.18}
                                 remaining=remaining-1
                                 local ok,started=pcall(function()
                                     row.health=actor:GetHealth()
@@ -364,6 +479,12 @@ function InfantrySlump.new(pose,bridge,log)
     end
 
     local function updateStationary(row,phase,now)
+        -- Use the same expiring AI lease as flight, so native targeting cannot
+        -- turn a stationary pose or restore its movement/rotation flags.
+        if phase==4 and now>=row.stationaryLeaseUntil then
+            if bridge(20,row.key,row.object,1)~=1 then return false end
+            row.stationaryLeaseUntil=now+0.1
+        end
         if phase~=4 or row.escape or row.rise then
             if row.poseMode==row.style then
                 if not pose.owns(row) then
@@ -373,24 +494,16 @@ function InfantrySlump.new(pose,bridge,log)
                     riseStartsRemaining=riseStartsRemaining-1
                     local time=not row.held and math.min(now-row.poseStart,row.poseDuration) or nil
                     row.rise=now+pose.rise(row,row.escape and 2.2 or 1,time)
+                    if phase~=4 then logPose(row,"rally stand-up") end
                 end
                 if now<row.rise then return true end
                 pose.deactivate(row)
                 row.poseMode=nil
-                restoreMode(row)
             end
             if phase~=4 then return false end
-            if reactingToHit(row.actor) or row.hitVisibleAt and now<row.hitVisibleAt+0.08 then return true end
-            row.hitVisibleAt=nil
             row.style,row.rise,row.held=nil,nil,nil
             hideWeapons(row)
             return beginFlight(row,now)
-        end
-        if row.movement.MovementMode~=0 then
-            row.actor:StopAIMovement()
-            row.actor:ConsumeMovementInputVector()
-            row.movement:StopMovementImmediately()
-            row.movement:DisableMovement()
         end
         if row.poseMode~=row.style then
             if not pose.arrivalReady(row) then return true end
@@ -403,6 +516,7 @@ function InfantrySlump.new(pose,bridge,log)
             local duration,offset=pose.start(row)
             if not duration then return false end
             row.poseStart,row.poseMode,row.poseDuration=now-offset,row.style,duration
+            logPose(row,row.style)
         end
         if not pose.owns(row) then
             if row.rebindAfter and now<row.rebindAfter then return true end
@@ -418,6 +532,9 @@ function InfantrySlump.new(pose,bridge,log)
 
     local function advance(row,key,now)
         local actor=row.actor
+        if liveEvidence and not row.stopping and valid(actor) and actor:IsDead() then
+            logSoldier(row,"dead",string.format("hp=%.1f->%.1f",row.health,actor:GetHealth()))
+        end
         if row.stopping or not valid(actor) or not valid(row.movement) or not actor:IsUnitized() or actor:IsDead() or mounted(actor) then return false end
         local phase,id,member,object=bridge(19,key)
         if id~=row.id or member~=row.member or object~=row.object then return false end
@@ -426,18 +543,12 @@ function InfantrySlump.new(pose,bridge,log)
             row.nextCheck=now+0.08
             local health=actor:GetHealth()
             damaged=health<row.health
+            if damaged and liveEvidence then logSoldier(row,"damage",string.format("phase=%d hp=%.1f->%.1f mode=%s noHit=%s reaction=%s",phase,row.health,health,tostring(row.movement.MovementMode),tostring(actor:IsNoHit()),tostring(reactingToHit(actor)))) end
             row.health=health
             local group=context.groups[id]
             if damaged and phase==4 then
                 row.escape=reportHit(actor,group,now)
                 row.lastThreat=row.escape
-                if row.style then
-                    -- Let the game's hit animation take over before scheduling the retreat.
-                    pose.deactivate(row)
-                    row.poseMode,row.rise=nil,nil
-                    row.hitVisibleAt=now
-                    restoreMode(row)
-                end
             elseif phase==4 and row.style and group then
                 local hit=threats[group.corps]
                 if hit and hit~=row.lastThreat and now<=hit.expires
@@ -450,28 +561,46 @@ function InfantrySlump.new(pose,bridge,log)
                 row.nextWeaponCheck=now+0.18
             end
         end
-        if row.style then
-            if not updateStationary(row,phase,now) then return false end
-            return true
-        end
-        if phase~=4 then return false end
-        if damaged or reactingToHit(actor) then
+        -- A horse can knock a soldier down without changing HP. Until the
+        -- native reaction ends, the game owns both the pose and movement.
+        local reacting,noHit=reactingToHit(actor),actor:IsNoHit()
+        if damaged or reacting or not grounded(row.movement) or noHit then
             row.resumeAfter=now+0.12
+            if liveEvidence then
+                local state=string.format("mode=%s noHit=%s reaction=%s",tostring(row.movement.MovementMode),tostring(noHit),tostring(reacting))
+                if not row.suspended or row.evidenceState~=state or now>=(row.evidenceAt or 0)+5 then
+                    logSoldier(row,row.suspended and "native reaction state" or "yield to native reaction",string.format("time=%.2f hp=%.1f %s",now,row.health,state))
+                    row.evidenceState,row.evidenceAt=state,now
+                end
+            end
             if not row.suspended then
                 row.suspended=true
-                stopPath(row)
+                stopPath(row,true)
+                releaseStationary(row)
+                releaseGround(row)
                 pose.deactivate(row)
-                row.poseMode=nil
-                restoreMode(row)
+                row.poseMode,row.rise=nil,nil
             end
             return true
         end
         if row.suspended then
             if now<row.resumeAfter then return true end
+            logSoldier(row,"native reaction ended",string.format("time=%.2f phase=%d hp=%.1f mode=%s noHit=%s",now,phase,row.health,tostring(row.movement.MovementMode),tostring(noHit)))
             row.suspended=false
-            hideWeapons(row)
-            return beginFlight(row,now)
+            if phase~=4 then return false end
+            if not row.style or row.escape then
+                row.style=nil
+                return beginFlight(row,now)
+            end
+            return beginStationary(row,now,row.style)
         end
+        followGround(row,now)
+        if row.style then
+            holdFacing(row)
+            if not updateStationary(row,phase,now) then return false end
+            return true
+        end
+        if phase~=4 then return false end
         if row.flightQueued then return beginFlight(row,now) end
         return updateFlight(row,now)
     end

@@ -212,7 +212,7 @@ function ExecuteInGameThread(callback)
  assert(bootstrapCalls==1,'Recurring game-thread scheduling must not be used')
  onGameThread(callback)
 end
-function ExecuteInGameThreadWithDelay(_,callback) assert(inGameThread);callbacks.heal=callback end
+function ExecuteInGameThreadWithDelay(_,callback) assert(inGameThread);callbacks.heal=function() onGameThread(callback) end end
 keyPresses,keyReads={},{}
 bindings=setmetatable({}, {__index=function(_,key) return function() keyPresses[key]=true;callbacks.intervals[50]() end end})
 local hud=widget('hud');hud.canvas_hud=widget('CanvasPanel')
@@ -227,36 +227,80 @@ function headActor:GetComponentByClass(class) assert(class.kind=='WidgetComponen
 battle.NPCHeadWidgetInfo={ForEach=function(_,callback)
  callback(1,{get=function() return {Actors={headActor},UnitID={ForEach=function(_,each) each(1,{get=function() return 1001 end}) end}} end})
 end}
-battle.ItemHeadWidgetNPC={ForEach=function() end}
-function battle:SetHeadItemNPC() end
+battle.ItemHeadWidgetNPC={ForEach=function(self,each)
+ for index,item in ipairs(self) do each(index,{get=function() return item end}) end
+end}
+supportMessages={}
+function battle:SetHeadItemNPC(character,text,value)
+ for _,item in ipairs(self.ItemHeadWidgetNPC) do
+  if item:GetVisibility()==1 then
+   item.text_eff:SetText(text);item.text_eff_num:SetText(value);item:SetVisibility(4)
+   supportMessages[#supportMessages+1]={character=character,text=text,value=value,item=item}
+   return
+  end
+ end
+end
 function battle:GetEnemyGaugeUnit() return enemyTarget end
 local characters=widget('CharacterManager');characters.m_arpCharacterList={}
+function setupSupport()
+ local function character(player)
+  local actor=widget('Character')
+  actor.x,actor.inView,actor.m_ePlayerID=0,true,player and 0 or 2
+  function actor:IsPlayer() return player end
+  function actor:IsUnitized() return true end
+  function actor:IsDead() return false end
+  function actor:IsInView(id) assert(id==0);return self.inView end
+  function actor:K2_GetActorLocation() return {X=self.x,Y=0,Z=0} end
+  function actor:K2_GetActorRotation() return {Yaw=0} end
+  function actor:GetHealth() return 100 end
+  function actor:GetMaxHealth() return 200 end
+  return actor
+ end
+ supportPlayer,supportOfficer=character(true),character(false)
+ characters.m_arpCharacterList={supportPlayer,supportOfficer}
+ for index=1,2 do
+  local item=widget('HeadItemWidget')
+  item:SetVisibility(1);item:SetRenderOpacity(1)
+  function item:GetVisibility() return self.visible end
+  function item:IsVisible() return self.visible==4 end
+  function item:GetRenderOpacity() return self.opacity end
+  item.text_eff,item.text_eff_num=widget('TextBlock'),widget('TextBlock')
+  for _,label in ipairs({item.text_eff,item.text_eff_num}) do
+   function label:GetText() return {ToString=function() return self.text end} end
+  end
+  battle.ItemHeadWidgetNPC[index]=item
+ end
+end
 local manager=widget('AlgoManager')
 local instance=widget('GameInstance')
-local sound=widget('SoundManager')
+local saveManager=widget('SaveDataManager')
+saveManager.GameStatusSaveGame=widget('GameStatusSaveGame')
+saveManager.GameStatusSaveGame.OptionData={Sound={SEVolume=16}}
 guardSoundCalls=0
-function sound:PlayRepelSE(spatial,position) assert(spatial and position.Z==10);guardSoundCalls=guardSoundCalls+1 end
 local result=widget('ResultHUDManager');result.CommonWidget=widget('UserWidget')
 result.CommonWidget.WidgetTree=widget('WidgetTree');result.CommonWidget.WidgetTree.RootWidget=widget('CanvasPanel')
 function FindFirstOf(name)
- return ({BattleHUDManager=battle,CharacterManager=characters,AlgoManager=manager,GameInstance=instance,SoundManager=sound,ResultHUDManager=resultActive and result or nil})[name]
+ return ({BattleHUDManager=battle,CharacterManager=characters,AlgoManager=manager,GameInstance=instance,SaveDataManager=saveManager,ResultHUDManager=resultActive and result or nil})[name]
 end
 nativeGroups={}
 for id=0,4 do nativeGroups[id]={id<3 and 0 or 1,100+id,id==0 and 3 or 6,id<3 and 0 or 1,1,100,100,id*100,0,0,8,0,0,0} end
-local function bridge(op,id)
+local function bridge(op,id,gain)
  if op==0 then return 1 end
  if op==1 then generation=generation+1;clock=0;guardRows={};return end
  if op==2 then return table.unpack(nativeGroups[id or 0]) end
  if op==3 and not missingCorps then return id==0 and 0 or 3,id,400,500,100,120,8,100,1,clock end
  if op==3 and id==0 then return 0,0,400,500,100,120,8,100,1,clock end
+ if op==4 and supportPending then supportPending=false;return 1,50 end
+ if op==5 and supportOfficer and id==supportOfficer:GetAddress() then return 0,-1,0,0,1,1,1,1 end
  if op==5 and enemyTarget then return 3,-1,targetCorps,targetCorps,1,1,1,1 end
  if op==7 then return groupCount or 5,2 end
- if op==8 then return 0 end
+ if op==8 then return #characters.m_arpCharacterList end
+ if op==9 then return id end
  if op==10 then return 0 end
  if op==12 then return clock,generation end
  if op==13 then return 10 end
  if op==17 then keyReads[id]=(keyReads[id] or 0)+1;local pressed=keyPresses[id];keyPresses[id]=nil;return pressed and 1 or 0 end
- if op==18 then return 0 end
+ if op==18 then assert(id==0 and math.abs(gain-0.4)<0.001);guardSoundCalls=guardSoundCalls+1;return 1 end
  if op==15 then return #(guardRows or {}),generation,clock end
  if op==16 then local row=guardRows[id];row[13]=row[13] or 0;row[14]=1001;return table.unpack(row) end
 end
@@ -376,6 +420,34 @@ guardRows={{2,1,0,300,200,10,0,6,0.9,0,1.2,1}}
 callbacks.intervals[50]()
 assert(guardSoundCalls==2,'New battle inherited the old sound sequence')
 return 'Passed real main.lua guard feedback: fast update, pressure fill, break text/audio, deduplication, results hiding and next-battle reset.'
+'''))
+
+support = LuaRuntime(unpack_returned_tuples=True)
+support.execute(harness)
+support.execute("iniText='[General]\\nLiveEvidence=1\\n';supportEvidence={};print=function(message) supportEvidence[#supportEvidence+1]=message end")
+support.execute('local source,name=...;assert(load(source,name))()', source, '@' + str(root / 'Scripts' / 'main.lua'))
+print(support.execute(r'''
+setupSupport()
+supportOfficer.inView=false;supportPending=true;tick(1)
+assert(#supportMessages==0 and not callbacks.heal,'Off-screen officer displayed a support message')
+supportOfficer.inView=true;supportPending=true;tick(2)
+assert(#supportMessages==1 and supportMessages[1].text=='Morale boosted' and callbacks.heal)
+local first=supportMessages[1].item
+supportPlayer.x=2000;callbacks.intervals[50]();callbacks.heal()
+assert(first.opacity==0 and #supportMessages==1,'Support text followed the player away from the officer')
+first:SetVisibility(1);callbacks.intervals[50]()
+assert(first.opacity==1,'Support popup left a reused native slot hidden')
+supportPlayer.x=0;supportPending=true;tick(3);callbacks.heal()
+assert(#supportMessages==3 and supportMessages[3].text=='Health restored' and supportMessages[3].value=='+50')
+local oldHeal=callbacks.heal
+newBattle();tick(0);oldHeal()
+assert(#supportMessages==3,'Delayed health message survived the battle change')
+local evidence=table.concat(supportEvidence,'\n')
+assert(evidence:find('support popup suppressed',1,true) and evidence:find('reason=outside-view',1,true))
+assert(evidence:find('support popup shown',1,true) and evidence:find('reason=nearby-and-in-view',1,true))
+assert(evidence:find('support popup hidden',1,true) and evidence:find('reason=out-of-range',1,true))
+assert(evidence:find('reason=battle-changed',1,true) and evidence:find('distance=20.0m',1,true))
+return 'Passed support popup visibility, delayed heal, battle change and native slot reuse.'
 '''))
 
 feedback_only = LuaRuntime(unpack_returned_tuples=True)
@@ -598,6 +670,11 @@ local function bridge(command, address, row)
     if command == 21 then
         check(rows[address].address == row)
         bound = bound + 1
+        if accepted then
+            for _, manager in ipairs(managers) do
+                if manager.address == address then manager.CommonWidget.BP_parts_briefing_list_menu_equipu.MenuArray[8] = rows[address] end
+            end
+        end
         return accepted and 1 or 0
     end
     check(command == 14 and rows[address] ~= nil)
@@ -605,7 +682,7 @@ local function bridge(command, address, row)
 end
 local function fixture(address)
     local manager, common, menu = widget(address), widget(), widget()
-    local first, last = widget(), widget()
+    local first, last, player = widget(10), widget(16), widget(12)
     manager.CommonWidget = common
     common.BP_parts_briefing_list_menu_equipu = menu
     local controller = widget()
@@ -613,6 +690,7 @@ local function fixture(address)
     menu.IsBattle = false
     menu.BP_parts_battle_setup_menu = first
     menu.BP_parts_battle_setup_menu_5 = last
+    menu.MenuArray = {first, widget(11), player, widget(13), widget(14), widget(15), last}
     last.Slot = {Padding="original padding"}
     menu.VerticalBox_0 = widget()
     function menu.VerticalBox_0:AddChildToVerticalBox(row)
@@ -621,6 +699,8 @@ local function fixture(address)
     local picker = widget()
     picker.visible, picker.inViewport = false, false
     manager.WeaponCustomSelectWidget = picker
+    manager.WeaponCustomWidget = widget()
+    manager.WeaponCustomWidget.visible = false
     picker.BP_parts_abandonment_chara_list = widget(1000 + address)
     picker.BP_parts_abandonment_chara_list.Visibility = 0
     picker.chara_full_xxx = widget(2000 + address)
@@ -628,11 +708,11 @@ local function fixture(address)
     picker.BP_parts_briefing_list_weapon = widget()
     picker.BP_parts_briefing_list_weapon.TextBlock_stocknow = text("12")
     picker.BP_parts_briefing_list_weapon.TextBlock_stockall = text("390")
-    return manager, menu, picker, first, last
+    return manager, menu, picker, first, last, player, controller
 end
 
 local attach, update = makeFusion(bridge)
-local manager, menu, picker, first, last = fixture(20)
+local manager, menu, picker, first, last, player, controller = fixture(20)
 managers = {manager}
 nativeActive = false; attach(); check(created == 0)
 nativeActive, available = true, false; attach(); check(created == 0)
@@ -653,8 +733,9 @@ mode, stock = 4, 41; update(); check(list.TextBlock_stocknow.value == "41")
 mode, stock = 1, 12; update()
 check(picker.BP_parts_abandonment_chara_list.Visibility == 0 and picker.chara_full_xxx.Visibility == 4)
 check(list.TextBlock_stocknow.value == "12" and list.TextBlock_stockall.value == "390")
+
 manager.valid = false; update()
 local nextManager = fixture(20)
 managers = {nextManager}; attach(); check(created == 3 and bound == 3)
-return "Passed " .. assertions .. " Lua bodyguard fusion menu assertions for attach, navigation, inventory scope, and cleanup."
+return "Passed " .. assertions .. " Lua bodyguard fusion menu assertions for navigation, inventory scope, and cleanup."
 '''))

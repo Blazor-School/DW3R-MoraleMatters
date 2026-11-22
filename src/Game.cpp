@@ -38,6 +38,11 @@ namespace MoraleMatters
     static int WaveCount = 0;
     static int CurrentWaves[MaxCorps] = {};
 
+    static bool SampleLiveEvidence(volatile LONG& count)
+    {
+        return Config.liveEvidence && InterlockedIncrement(&count) <= 24;
+    }
+
     void ClassifyUnit(int unit, bool elite)
     {
         if (unit >= 0 && unit < 65536)
@@ -130,7 +135,8 @@ namespace MoraleMatters
         {
             void* group = Group(id);
             const int attribute = At<uint8_t>(group, 0x2DFD);
-            Arrivals[id].seen = (attribute != 1 && attribute != 2) || At<uint8_t>(group, 0x110) || At<uint8_t>(group, 0x186);
+            // The game keeps dormant reserves inactive until their native spawn completes.
+            Arrivals[id].seen = (attribute != 1 && attribute != 2) || At<uint8_t>(group, 0x110);
         }
         EncounterLogged = false;
         Log("Battle state reset; groups=%d corps=%d.", GroupCount(), CorpsCount());
@@ -363,6 +369,8 @@ namespace MoraleMatters
             auto* args = At<int*>(effect, 0x20);
             if (Readable(args, 12))
             {
+                if (Config.liveEvidence)
+                    Log("Live evidence: scenario arrival command paragraph=%d effect=%d side=%d selector=%d argument=%d.", cause, type, args[0], args[1], args[2]);
                 int selected = -1;
                 for (int id = 0; id < GroupCount(); ++id)
                 {
@@ -440,7 +448,8 @@ namespace MoraleMatters
         const bool scriptedReinforcement = attribute == 2 && id >= 0 && id < GroupCount() && Group(id) == group && GroupEvents[id].known;
         const bool surprise = Config.surpriseForces && (attribute == 1 || scriptedReinforcement);
         const bool enabled = surprise || (attribute == 2 && Config.reinforcements);
-        const bool candidate = enabled && id >= 0 && id < GroupCount() && Group(id) == group && corps >= 0 && corps < CorpsCount() && side >= 0 && side < 2 && side == At<int>(CorpsObject(corps), 0xC) && !Arrivals[id].seen && value == 0 && !At<uint8_t>(group, 0x110) && !At<uint8_t>(group, 0x186);
+        const bool activating = !At<uint8_t>(group, 0x186) || At<uint8_t>(group, 0x191) || At<uint8_t>(group, 0x192);
+        const bool candidate = enabled && id >= 0 && id < GroupCount() && Group(id) == group && corps >= 0 && corps < CorpsCount() && side >= 0 && side < 2 && side == At<int>(CorpsObject(corps), 0xC) && !Arrivals[id].seen && value == 0 && !At<uint8_t>(group, 0x110) && activating;
         if (candidate)
         {
             Arrivals[id].seen = true; // Before the recursive native setter visits children.
@@ -452,6 +461,9 @@ namespace MoraleMatters
                 Reinforcements[corps].Begin(CorpsSoldiers(corps), Config);
                 CurrentWaves[corps] = WaveCount < MaxGroups ? WaveCount++ : -1;
             }
+            static volatile LONG evidence = 0;
+            if (SampleLiveEvidence(evidence))
+                Log("Live evidence: reserve activation group=%d corps=%d attribute=%d inactive=%d surprise=%d.", id, corps, attribute, At<uint8_t>(group, 0x186), surprise);
         }
         OriginalSpecialAttribute(group, value);
         if (candidate && At<uint8_t>(group, 0x2DFD) == 0)
@@ -475,9 +487,9 @@ namespace MoraleMatters
             if (!arrival.pending || arrival.corps != corps)
                 continue;
             void* group = Group(id);
-            if (At<int>(group, 0x38) != corps || At<int>(group, 0x40) != arrival.side || At<int>(CorpsObject(corps), 0xC) != arrival.side || At<uint8_t>(group, 0x110) || At<uint8_t>(group, 0x186) || At<uint8_t>(group, 0x198) || At<uint8_t>(group, 0x2DFD) != 0)
+            if (At<int>(group, 0x38) != corps || At<int>(group, 0x40) != arrival.side || At<int>(CorpsObject(corps), 0xC) != arrival.side || At<uint8_t>(group, 0x110) || At<uint8_t>(group, 0x198) || At<uint8_t>(group, 0x2DFD) != 0)
                 arrival.pending = false;
-            else if (!At<uint8_t>(group, 0x191) && GroupAlive(group))
+            else if (!At<uint8_t>(group, 0x186) && !At<uint8_t>(group, 0x191) && GroupAlive(group))
             {
                 wave.Arrive(SoldierCount(group), Config, arrival.surprise);
                 if (!GroupEvents[id].known)
@@ -574,6 +586,8 @@ namespace MoraleMatters
         const float before = morale;
         state.SetProximity(morale, nearby, Config);
         RecordMorale(id, nearby ? MoraleReason::EnemyProximity : MoraleReason::EnemySeparated, morale - before);
+        if (Config.liveEvidence && morale != before)
+            Log("Live evidence: enemy corps proximity corps=%d nearby=%d morale=%.2f -> %.2f.", id, nearby, before, morale);
     }
 
     static void CorpsTick(void* object, float dt)
@@ -876,6 +890,7 @@ namespace MoraleMatters
         if (!ArcherRandomState) ArcherRandomState = 1;
         HookSpec hooks[] = {
             {GameRva<0x1641D20>(), reinterpret_cast<void*>(&SelectEquipment), reinterpret_cast<void**>(&OriginalSelectEquipment)},
+            {GameRva<0x1646040>(), reinterpret_cast<void*>(&EquipmentFocus), reinterpret_cast<void**>(&OriginalEquipmentFocus)},
             {GameRva<0x16963C0>(), reinterpret_cast<void*>(&FusionInit), reinterpret_cast<void**>(&OriginalFusionInit)},
             {GameRva<0x1696920>(), reinterpret_cast<void*>(&FusionBase), reinterpret_cast<void**>(&OriginalFusionBase)},
             {GameRva<0x1697A10>(), reinterpret_cast<void*>(&FusionClick), reinterpret_cast<void**>(&OriginalFusionClick)},

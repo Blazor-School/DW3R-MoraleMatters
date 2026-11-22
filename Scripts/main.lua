@@ -26,6 +26,7 @@ end
 local function textSetting(key, fallback) return settings[key] or fallback end
 local function valid(object) return object and object:IsValid() end
 local function log(message) print("[MoraleMatters] " .. message .. "\n") end
+local liveEvidence = number("general.liveevidence", 0, 0, 1) == 1
 local bridge, bridgeError = package.loadlib(binDir .. "\\MoraleMatters.asi", "MoraleMatters_Query")
 if not bridge then log("Native core could not load: " .. tostring(bridgeError)); return end
 if number("general.enabled", 1, 0, 1) == 0 then log("Disabled in INI."); return end
@@ -34,7 +35,7 @@ if type(LoopInGameThreadWithDelay) ~= "function" or type(ExecuteInGameThreadWith
 end
 local Experience = dofile(modDir .. "\\Scripts\\Experience.lua")
 local infantryPose = dofile(modDir .. "\\Scripts\\InfantryPose.lua")
-local infantrySlump = dofile(modDir .. "\\Scripts\\InfantrySlump.lua").new(infantryPose,bridge,log)
+local infantrySlump = dofile(modDir .. "\\Scripts\\InfantrySlump.lua").new(infantryPose,bridge,log,liveEvidence)
 local experienceConfig = {
     distress=number("battlefield.distresssignals",1,0,1)==1,
     rescue=number("rescue.enabled",1,0,1)==1,
@@ -271,18 +272,109 @@ local function bindHUD()
     return true
 end
 
-local function popup(character, rallied, healed)
-    if not valid(hudManager) or not valid(character) then return end
-    hudManager.ItemHeadWidgetNPC:ForEach(function(_, element)
-        local widget = element:get()
-        if valid(widget) then widget.duration = number("support.popupseconds", 2.5, 0.5, 15) end
-    end)
-    if rallied then hudManager:SetHeadItemNPC(character, textSetting("support.moraletext", "Morale boosted"), "") end
-    if healed > 0 then
-        local show = function()
-            if valid(hudManager) and valid(character) then hudManager:SetHeadItemNPC(character, textSetting("support.healtext", "Health restored"), "+" .. math.floor(healed + 0.5)) end
+local supportPopups,supportPlayers = {},{}
+local supportRangeSquared = (number("support.encounterradiusmetres",10,0.1,1000)*100)^2
+local supportPopupSeconds = number("support.popupseconds",2.5,0.5,15)
+local supportLogGeneration,supportLogCount=nil,0
+
+local function logSupport(id,event,reason,distance,text)
+    if not liveEvidence then return end
+    if supportLogGeneration~=experienceGeneration then supportLogGeneration,supportLogCount=experienceGeneration,0 end
+    if supportLogCount>=160 then return end
+    supportLogCount=supportLogCount+1
+    log(string.format("Live evidence: support popup %s generation=%s group=%s reason=%s distance=%s text=%q",event,tostring(experienceGeneration),tostring(id),reason,distance and string.format("%.1fm",distance) or "unknown",text or ""))
+    if supportLogCount==160 then log("Live evidence: support popup detail limit reached for this battle (160 events).") end
+end
+
+local function supportInView(character, id)
+    if not valid(character) then return false,"invalid-character" end
+    if not character:IsUnitized() then return false,"not-unitized" end
+    if character:IsDead() then return false,"dead" end
+    if bridge(5,character:GetAddress())~=id then return false,"identity-changed" end
+    local position = character:K2_GetActorLocation()
+    local nearest=math.huge
+    for _, player in ipairs(supportPlayers) do
+        if valid(player.character) then
+            local origin = player.character:K2_GetActorLocation()
+            local dx,dy,dz = position.X-origin.X,position.Y-origin.Y,position.Z-origin.Z
+            local distance=dx*dx+dy*dy+dz*dz
+            nearest=math.min(nearest,distance)
+            if distance <= supportRangeSquared and character:IsInView(player.character.m_ePlayerID) then return true,"nearby-and-in-view",math.sqrt(distance)/100 end
         end
-        if rallied then ExecuteInGameThreadWithDelay(600, show) else show() end
+    end
+    if nearest==math.huge then return false,"no-player" end
+    return false,nearest>supportRangeSquared and "out-of-range" or "outside-view",math.sqrt(nearest)/100
+end
+
+local function supportText(widget)
+    return widget.text_eff:GetText():ToString(),widget.text_eff_num:GetText():ToString()
+end
+
+local function updateSupportPopups()
+    if not next(supportPopups) then return end
+    local _,generation = bridge(12)
+    for address, popup in pairs(supportPopups) do
+        local widget = popup.widget
+        if not valid(widget) then
+            logSupport(popup.id,"released","invalid-widget",nil,popup.text)
+            supportPopups[address]=nil
+        else
+            local text,value = supportText(widget)
+            if not widget:IsVisible() or popup.text~=text or popup.value~=value then
+                logSupport(popup.id,"released",not widget:IsVisible() and "expired" or "slot-reused",nil,popup.text)
+                if popup.hidden then widget:SetRenderOpacity(popup.opacity) end
+                supportPopups[address]=nil
+            elseif not popup.hidden then
+                local visible,reason,distance=supportInView(popup.character,popup.id)
+                if feedbackSuspended or popup.generation~=generation or not visible then
+                    popup.hidden=true
+                    widget:SetRenderOpacity(0)
+                    logSupport(popup.id,"hidden",feedbackSuspended and "battle-inactive" or popup.generation~=generation and "battle-changed" or reason,distance,popup.text)
+                end
+            end
+        end
+    end
+end
+
+local function popup(character, id, rallied, healed)
+    if feedbackSuspended or not valid(hudManager) then logSupport(id,"suppressed","hud-inactive");return end
+    local visible,reason,distance=supportInView(character,id)
+    if not visible then logSupport(id,"suppressed",reason,distance);return end
+    local manager,generation = hudManager,experienceGeneration
+    local function show(text,value)
+        if feedbackSuspended or not valid(manager) or not valid(hudManager) or hudManager:GetAddress()~=manager:GetAddress() then logSupport(id,"suppressed","hud-changed",nil,text);return end
+        local _,currentGeneration = bridge(12)
+        if currentGeneration~=generation then logSupport(id,"suppressed","battle-changed",nil,text);return end
+        local inView,why,metres=supportInView(character,id)
+        if not inView then logSupport(id,"suppressed",why,metres,text);return end
+        local available
+        -- The native HUD takes the first collapsed slot. Keep ownership only
+        -- of the message we just created, so other popups can use the pool.
+        manager.ItemHeadWidgetNPC:ForEach(function(_, element)
+            local widget = element:get()
+            if not available and valid(widget) and widget:GetVisibility()==1 then available=widget end
+        end)
+        if not available then logSupport(id,"suppressed","no-free-slot",metres,text);return end
+        local address = available:GetAddress()
+        local previous = supportPopups[address]
+        if previous and previous.hidden then available:SetRenderOpacity(previous.opacity) end
+        supportPopups[address]=nil
+        available.duration=supportPopupSeconds
+        manager:SetHeadItemNPC(character,text,value)
+        if available:IsVisible() then
+            local actualText,actualValue = supportText(available)
+            supportPopups[address]={widget=available,character=character,id=id,generation=generation,text=actualText,value=actualValue,opacity=available:GetRenderOpacity()}
+            logSupport(id,"shown",why,metres,actualText.." "..actualValue)
+        else
+            logSupport(id,"suppressed","native-widget-not-visible",metres,text)
+        end
+    end
+    if rallied then show(textSetting("support.moraletext", "Morale boosted"),"") end
+    if healed > 0 then
+        local function showHeal()
+            show(textSetting("support.healtext", "Health restored"),"+" .. math.floor(healed + 0.5))
+        end
+        if rallied then ExecuteInGameThreadWithDelay(600, showHeal) else showHeal() end
     end
 end
 
@@ -298,10 +390,11 @@ local function scanCharacters()
             local id, member, corps, side, outgoing, incoming, frequency, named = bridge(5, character:GetAddress())
             if character:IsPlayer() then
                 local position, rotation = character:K2_GetActorLocation(),character:K2_GetActorRotation()
-                players[#players + 1] = {X=position.X,Y=position.Y,Z=position.Z,Yaw=rotation.Yaw}
+                players[#players + 1] = {X=position.X,Y=position.Y,Z=position.Z,Yaw=rotation.Yaw,character=character}
             elseif id and side == 0 and named == 1 then officers[#officers + 1] = {character=character, id=id,corps=corps} end
         end
     end
+    supportPlayers=players
     for _, entry in ipairs(officers) do
         local character = entry.character
         local position = character:K2_GetActorLocation()
@@ -313,7 +406,7 @@ local function scanCharacters()
         local hp, maximum = character:GetHealth(),character:GetMaxHealth()
         local rallied, healed = bridge(4, entry.id, math.sqrt(distanceSquared), hp, maximum, character:GetAddress())
         liveHealth[entry.id] = maximum > 0 and math.max(0,math.min(1,(hp+(healed or 0))/maximum)) or 1
-        if rallied == 1 or healed and healed > 0 then popup(character, rallied == 1, healed or 0) end
+        if rallied == 1 or healed and healed > 0 then popup(character, entry.id, rallied == 1, healed or 0) end
         if rallied == 1 or healed and healed > 0 then support[#support+1] = {id=entry.id,corps=entry.corps,rallied=rallied==1,healed=healed or 0} end
     end
     return players,support,liveHealth
@@ -526,6 +619,10 @@ local function updateNotice(groups, players)
     local x = left+(expanded and 2 or 1)*(width+10)
     if widget.x ~= x then widget.slot:SetPosition({X=x,Y=top}); widget.x=x end
     visibility(widget.root,widget,4)
+    if liveEvidence and (widget.loggedTitle ~= values.title or widget.loggedName ~= values.name) then
+        widget.loggedTitle,widget.loggedName = values.title,values.name
+        log(string.format("Live evidence: %s | %s | %s",values.title,values.name,values.detail))
+    end
 end
 
 local function renderReport(widget, parent, onResults)
@@ -643,12 +740,16 @@ ExecuteInGameThread(function()
     end)
     LoopInGameThreadWithDelay(50, function()
         if updateBodyguardFusion then guard("Bodyguard Weapon Fusion", updateBodyguardFusion) end
+        guard("Support popups", updateSupportPopups)
         guard("Hotkeys", function()
             -- Read each key once so two features can share a configured key.
             local pressed = {}
             for _, binding in ipairs(hotkeys) do
                 if pressed[binding.key] == nil then pressed[binding.key] = bridge(17,binding.key)==1 end
-                if pressed[binding.key] then binding.action() end
+                if pressed[binding.key] then
+                    binding.action()
+                    if liveEvidence then log(string.format("Live evidence: HUD key=%d expanded=%s page=%d report=%s",binding.key,tostring(expanded),page+1,tostring(reportShown))) end
+                end
             end
         end)
         guard("Guard feedback", function()
@@ -686,7 +787,11 @@ ExecuteInGameThread(function()
             local byId,list,groups = formations(players,liveHealth)
             infantrySlump.observe(characterManager,players,groups,generation)
             local completions = experience:update(now or 0,byId,groups,players,support)
-            for _,entry in ipairs(completions) do experience:complete(entry,bridge(13,entry.officer) or -1) end
+            for _,entry in ipairs(completions) do
+                local reward = bridge(13,entry.officer) or -1
+                experience:complete(entry,reward)
+                if liveEvidence and reward >= 0 then log(string.format("Live evidence: rescue paid officerGroup=%d morale=%.2f",entry.officer,reward)) end
+            end
             guard("HUD", function() updateHUD(players,byId,list); updateNotice(groups,players) end)
             if profile then
                 local elapsed = bridge(10)-started
@@ -698,4 +803,5 @@ ExecuteInGameThread(function()
         end)
     end)
 end)
-log("Loaded with game-thread timers and polled hotkeys. F7 toggles all-corps panels; Page Up/Down changes pages; F8 toggles the battle report.")
+log("Loaded with game-thread timers and foreground hotkeys. F7 toggles all-corps panels; Page Up/Down changes pages; F8 toggles the battle report.")
+if liveEvidence then log("Live evidence enabled: infantry damage/reaction states, guard sound gain changes, support popup decisions and native fusion return focus. Per-battle detail limits: infantry=320 sound=128 support=160.") end

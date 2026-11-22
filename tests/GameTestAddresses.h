@@ -14,6 +14,7 @@ namespace MoraleMatters
             ActiveGameBuild = GameBuild::Legacy;
             return true;
         case 0xB3C9000:
+        case 0xB403000:
             ActiveGameBuild = GameBuild::Patch110;
             return true;
         default:

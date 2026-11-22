@@ -14,6 +14,14 @@ static WeaponFusionTile GuardDetailFirst;
 static int GuardRenderedEffect, GuardRenderedValue;
 static bool GuardInitScoped;
 static uint8_t SelectedEquipmentIndex;
+static uint8_t FocusedEquipmentIndex;
+static int EquipmentFocusCalls;
+
+static void EquipmentFocusFixture(void*, uint8_t index)
+{
+    FocusedEquipmentIndex = index;
+    ++EquipmentFocusCalls;
+}
 
 static bool SelectEquipmentFixture(void* manager, uint8_t index)
 {
@@ -382,9 +390,21 @@ static int GuardFusionCases()
     const auto& click = At<FusionArray>(fusionRow, 0x360);
     CHECK(click.data != callback && click.count == 1 && memcmp(click.data, callback, sizeof(callback)) == 0);
     CHECK(SelectEquipment(GuardManager, 7));
-    CHECK(SelectedEquipmentIndex == 2 && At<uint8_t>(equipmentMenu, EquipmentMenuOffset(0x390)) == 2);
+    CHECK(SelectedEquipmentIndex == 2 && At<uint8_t>(equipmentMenu, EquipmentMenuOffset(0x390)) == 7);
+    OriginalEquipmentFocus = &EquipmentFocusFixture;
+    EquipmentFocusCalls = 0;
+    EquipmentFocus(equipmentMenu, 2);
+    CHECK(EquipmentFocusCalls == 1 && FocusedEquipmentIndex == 7);
+    EquipmentFocus(equipmentMenu, 6);
+    CHECK(EquipmentFocusCalls == 2 && FocusedEquipmentIndex == 6);
+    Config.weaponFusion = false;
+    EquipmentFocus(equipmentMenu, 2);
+    CHECK(FocusedEquipmentIndex == 2);
+    Config.weaponFusion = true;
     CHECK(GuardFusionSelector == GuardSelector && GuardListedCount == 4);
     CHECK(SelectEquipment(GuardManager, 2));
+    EquipmentFocus(equipmentMenu, 2);
+    CHECK(FocusedEquipmentIndex == 2);
     CHECK(GuardFusionSelector == nullptr && GuardFusionWidget == nullptr && GuardListedCount == 3);
     CHECK(SelectEquipment(GuardManager, 7) && GuardListedCount == 4);
     CHECK(memcmp(saveBefore, GuardSave, sizeof(saveBefore)) == 0 && memcmp(officersBefore, OfficerWeapons, sizeof(officersBefore)) == 0);

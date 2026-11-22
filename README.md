@@ -42,7 +42,7 @@ Use **Browse** beside **Game folder** and select:
 <game installation>\DW3CE_RE\Binaries\Win64
 ```
 
-This folder must contain both `DW3CE_RE-Win64-Shipping.exe` and `DW3CE_RE-Win64-Shipping.tnk`. The UI remembers your selection and loads the settings of a recognized installed mod.
+This folder must contain `DW3CE_RE-Win64-Shipping.exe` or `DW3CE_RE-Win64-Shipping.tnk.exe`. The UI remembers your selection and loads the settings of a recognized installed mod.
 
 ### 2. Install or update the mod
 
@@ -83,7 +83,7 @@ Edits are not saved automatically. Select **Save settings** when finished. Corre
 - **Archer settings** default to random targeting and `1.5` damage taken. Turn random targeting off to restore native selection, or set archer damage taken to `1` to disable the extra damage. Set `DamageTakenMultiplier=0` in `MoraleMatters.ini` for no incoming on-screen hit damage. Values below `1` are INI-only; the UI retains its existing input limits.
 - **Attack frequency** changes native AI attack retry waits. Higher values shorten those waits; attack animations keep their normal speed.
 - **Guard pressure** counts blocked hits, including individual hits of multi-hit charge and Musou attacks. Three blocked normal hits followed by one blocked charge hit reach an ordinary soldier's default threshold of `6`. The opening starts with the break; pressure breaks have a further `3`-second cooldown after that opening. Native guaranteed breaks still work during cooldown. Local disruption has a per-source-group cooldown and a per-target cooldown; it adds no morale loss or damage and cannot trigger further disruption pulses. Mounted attacks, projectiles, throws, fixed damage, unblockables and script-protected enemies keep native handling.
-- **Guard shields** drain toward a break: fewer gold shields means the enemy is closer to losing its guard. The break label is an event indicator; its duration can differ from the combat opening. `[GuardPressure] ShowPressureBar` retains its name for existing INIs and now controls shield rows; `ShowBreakIndicator`, `BreakSound` and `IndicatorSeconds` retain their roles. The custom cues use flesh_4.wav for blocked hits and break_3.wav for full breaks. Both follow Windows audio volume. Full-break playback falls back to the native spatial deflection impact if its WAV is missing or playback fails. Hit cues never interrupt full breaks; native block impacts remain untouched. See `Scripts/Assets/README.txt` for source and timing.
+- **Guard shields** drain toward a break. Fewer gold shields means the enemy is closer to losing its guard. The break label is an event indicator and its duration can differ from the combat opening. `[GuardPressure] ShowPressureBar` controls the shield rows, and `BreakSound` controls both custom cues. Each cue uses the game's **Sound Effects** slider multiplied by its own INI cap, `HitVolumePercent` or `BreakVolumePercent`. Both caps default to `50` and accept `0` to `100`. A cap of `50` with the slider at `80%` plays at `40%` of the clip's original amplitude. Hit cues never interrupt full breaks. See `Scripts/Assets/README.txt` for source and timing.
 - Combat effects change gradually between the five rows. Keep morale points increasing from **Very low** to **Very high**.
 - Fraction fields use `0`–`1`: for example, a **Healing fraction** of `0.5` restores 50% of maximum health. Gameplay durations and cooldowns use battle time.
 
@@ -95,17 +95,18 @@ Edits are not saved automatically. Select **Save settings** when finished. Corre
 
 | Problem | Check |
 | --- | --- |
-| **Game not found** | Select the `Win64` folder containing both the `.exe` and `.tnk` files listed above. |
+| **Game not found** | Select the `Win64` folder containing either executable listed above. |
 | **Not installed**, or settings are unavailable | Check the selected folder. Detection recognizes known released ASI files; a custom or unrecognized build can also appear as not installed. |
 | No versions appear, or installation fails | Check access to GitHub, write access to the selected folder, and that the game is closed. |
 | **Settings contain invalid values** | Check the expanded sections for validation messages. Rearm distance must be at least the encounter radius; regroup recovery must be at least its start threshold; combat morale points must increase across the rows. |
 | Saved settings have no effect | Restart the game and confirm the UI points to the installation you are launching. |
 | The mod does not load or behaves unexpectedly | Check the ASI loader and UE4SS, then inspect `MoraleMatters.log` in the selected folder and `ue4ss/UE4SS.log`. Mods changing the same combat, morale, AI or HUD behavior may conflict. |
 
-The native mod supports these builds of `DW3CE_RE-Win64-Shipping.exe`. Before installing hooks, it checks the executable hash, the corresponding image size, and the code bytes at the expected locations.
+The native mod accepts the executable names `DW3CE_RE-Win64-Shipping.exe` and `DW3CE_RE-Win64-Shipping.tnk.exe`. Before installing hooks, it checks the executable hash, the corresponding image size, and the code bytes at the expected locations.
 
 | Executable SHA-256 | Expected image size |
 | --- | --- |
 | `b57a2d4cbd01c9c5abd651fa42f43a4b8fdae88da6403106cd5f5c1bf4dade70` | `0xB39E000` |
 | `ca1a65a53242a7cf42493bd2006b8c555d87597387468e4b7a07c52d4eefe92e` | `0xB3D8000` |
 | `8a3644a0e002ece5867c2f49720a4ed05900af7e09d10d39f8404b6086382849` (game patch 1.1.0) | `0xB3C9000` |
+| `b6c1023db00b858927d4eeb2a71f8bfc42a3f55ef3ab2aebf3c5f4ec75e390bc` (`.tnk.exe`, game patch 1.1.0 layout) | `0xB403000` |

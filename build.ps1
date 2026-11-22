@@ -88,33 +88,19 @@ Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werro
 if ($LASTEXITCODE -ne 0) { throw 'On-screen combat integration tests failed' }
 & $onscreenTests patch110
 if ($LASTEXITCODE -ne 0) { throw 'On-screen combat integration tests failed on the patch 1.1.0 layout' }
-$nativeDamageTests = Join-Path $buildRoot 'NativeDamageIntegration.exe'
-$nativeExecutable = Join-Path (Split-Path -Parent $projectRoot) 'DW3CE_RE\Binaries\Win64\DW3CE_RE-Win64-Shipping.exe'
-if (Test-Path -LiteralPath $nativeExecutable) {
-    Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-static', '-o', $nativeDamageTests, (Join-Path $projectRoot 'tests\NativeDamageIntegration.cpp')) + $hookObjects)
-    & $nativeDamageTests $nativeExecutable
-    if ($LASTEXITCODE -ne 0) { throw 'Native executable damage formula tests failed' }
-    $offscreenTests = Join-Path $buildRoot 'OffscreenDefeatIntegration.exe'
-    Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-static', '-o', $offscreenTests, (Join-Path $projectRoot 'tests\OffscreenDefeatIntegration.cpp')) + $hookObjects)
-    & $offscreenTests $nativeExecutable
-    if ($LASTEXITCODE -ne 0) { throw 'Native off-screen defeat and save/load tests failed' }
-    $nativeDropTests = Join-Path $buildRoot 'NativeDropIntegration.exe'
-    Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-static', '-o', $nativeDropTests, (Join-Path $projectRoot 'tests\NativeDropIntegration.cpp')) + $hookObjects)
-    & $nativeDropTests $nativeExecutable
-    if ($LASTEXITCODE -ne 0) { throw 'Native executable drop selection tests failed' }
-    $weaponFusionTests = Join-Path $buildRoot 'WeaponFusionIntegration.exe'
-    Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-static', '-o', $weaponFusionTests, (Join-Path $projectRoot 'tests\WeaponFusionIntegration.cpp')) + $hookObjects)
-    & $weaponFusionTests $nativeExecutable
-    if ($LASTEXITCODE -ne 0) { throw 'Native weapon fusion integration tests failed' }
-    $archerTests = Join-Path $buildRoot 'ArcherIntegration.exe'
-    Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-static', '-o', $archerTests, (Join-Path $projectRoot 'tests\ArcherIntegration.cpp')) + $hookObjects)
-    & $archerTests $nativeExecutable
-    if ($LASTEXITCODE -ne 0) { throw 'Native archer targeting and damage integration tests failed' }
-    $guardTests = Join-Path $buildRoot 'GuardPressureIntegration.exe'
-    Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-static', '-o', $guardTests, (Join-Path $projectRoot 'tests\GuardPressureIntegration.cpp')) + $hookObjects)
-    & $guardTests $nativeExecutable
-    if ($LASTEXITCODE -ne 0) { throw 'Native guard pressure integration tests failed' }
-
+$gameBin = Join-Path (Split-Path -Parent $projectRoot) 'DW3CE_RE\Binaries\Win64'
+$gameProcesses = @('DW3CE_RE-Win64-Shipping', 'DW3CE_RE-Win64-Shipping.tnk')
+$nativeExecutables = @($gameProcesses | ForEach-Object { Join-Path $gameBin "$_.exe" } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+if ($nativeExecutables.Count) {
+    foreach ($test in @('NativeDamageIntegration', 'OffscreenDefeatIntegration', 'NativeDropIntegration', 'WeaponFusionIntegration', 'ArcherIntegration', 'GuardPressureIntegration')) {
+        $testExecutable = Join-Path $buildRoot "$test.exe"
+        Invoke-Compiler (@('c++') + $flags + @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-static', '-o', $testExecutable, (Join-Path $projectRoot "tests\$test.cpp")) + $hookObjects)
+        foreach ($nativeExecutable in $nativeExecutables) {
+            Write-Output "Running $test on $(Split-Path -Leaf $nativeExecutable)"
+            & $testExecutable $nativeExecutable
+            if ($LASTEXITCODE -ne 0) { throw "$test failed on $nativeExecutable" }
+        }
+    }
 }
 & $PythonPath (Join-Path $projectRoot 'tests\LuaExperienceTests.py')
 if ($LASTEXITCODE -ne 0) { throw 'Lua battlefield/HUD integration tests failed (requires Python and lupa)' }
@@ -139,8 +125,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'vendor\minhook\LICENSE.txt') -De
 $archive = Join-Path $projectRoot 'MoraleMatters-v1.9.0.zip'
 Compress-Archive -Path (Join-Path $packageRoot '*') -DestinationPath $archive -Force
 if ($Install) {
-    if (Get-Process -Name 'DW3CE_RE-Win64-Shipping' -ErrorAction SilentlyContinue) { throw 'Close the game before installing.' }
-    $gameBin = Join-Path (Split-Path -Parent $projectRoot) 'DW3CE_RE\Binaries\Win64'
+    if (Get-Process -Name $gameProcesses -ErrorAction SilentlyContinue) { throw 'Close the game before installing.' }
     Copy-Item -LiteralPath (Join-Path $packageBin 'MoraleMatters.asi'), (Join-Path $packageBin 'MoraleMatters.ini') -Destination $gameBin -Force
     Copy-Item -LiteralPath (Join-Path $packageMod 'Scripts') -Destination (Join-Path $gameBin 'ue4ss\Mods\MoraleMatters') -Recurse -Force
     $gamePaks = Join-Path $gameBin '..\..\Content\Paks'
