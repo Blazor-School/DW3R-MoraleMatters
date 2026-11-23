@@ -5,7 +5,7 @@ pushd "%~dp0"
 if errorlevel 1 exit /b 1
 
 set "PACK_PROJECT=MoraleMattersUI.csproj"
-set "PACK_FRAMEWORK=net10.0-windows10.0.19041.0"
+set "PACK_FRAMEWORK=net11.0-windows10.0.19041.0"
 set "PACK_APP_VERSION="
 set "PACK_VELOPACK_VERSION="
 set "PACK_EXIT_CODE=1"
