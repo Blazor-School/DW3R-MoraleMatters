@@ -91,7 +91,7 @@ static bool SelectRandomArcherTarget(void* controller, void* owner)
     if (search.controller == controller && search.owner == owner && now < search.retry)
         return false;
     search = {controller, owner, now + 500};
-    void* manager = At<void*>(Image, 0xA9C50F0); // Native CharacterManager singleton.
+    void* manager = At<void*>(Image, GameRva<0xA9C50F0>()); // Native CharacterManager singleton.
     if (!Readable(manager, 0x60))
         return false;
     const int count = At<int>(manager, 0x58);
@@ -114,6 +114,9 @@ static bool SelectRandomArcherTarget(void* controller, void* owner)
             ArcherInRange(controller, candidate); // Restore this actor's distance/pitch after scanning.
             At<int>(controller, 0x408) = At<int>(candidate, 0x7A0);
             search.retry = 0;
+            static volatile LONG evidence = 0;
+            if (SampleLiveEvidence(evidence))
+                Log("Live evidence: archer target acquired group=%d targetGroup=%d player=%d.", GroupIdFromCharacter(owner), GroupIdFromCharacter(candidate), At<uint8_t>(candidate, 0x74C) < 2);
             return true;
         }
     }
@@ -162,7 +165,7 @@ struct ArcherDamageFrame { float xmm6[4]; float* storedDamage; bool zeroDamage; 
 static_assert(offsetof(ArcherDamageFrame, storedDamage) == 0x10 && offsetof(ArcherDamageFrame, zeroDamage) == 0x18, "Archer damage bridge layout");
 extern "C" float MoraleMattersArcherDamage(void* component, float damage, void* returnAddress, ArcherDamageFrame* caller)
 {
-    if (returnAddress != Image + 0x153499D || Config.archerDamageTaken == 1 || !component || damage < 0 || !isfinite(damage))
+    if (returnAddress != Image + GameRva<0x153499D>() || Config.archerDamageTaken == 1 || !component || damage < 0 || !isfinite(damage))
         return damage;
     void* defender = At<void*>(component, 0xB8);
     const float adjusted = damage * Config.archerDamageTaken;
@@ -174,6 +177,9 @@ extern "C" float MoraleMattersArcherDamage(void* component, float damage, void* 
     caller->xmm6[0] = adjusted;
     *caller->storedDamage = adjusted;
     caller->zeroDamage = Config.archerDamageTaken == 0;
+    static volatile LONG evidence = 0;
+    if (damage > 0 && SampleLiveEvidence(evidence))
+        Log("Live evidence: archer damage group=%d before=%.2f after=%.2f multiplier=%.2f.", GroupIdFromCharacter(defender), damage, adjusted, Config.archerDamageTaken);
     return adjusted;
 }
 extern "C" bool ArcherHit(void*, void*, float, float, uint8_t, bool, bool*);

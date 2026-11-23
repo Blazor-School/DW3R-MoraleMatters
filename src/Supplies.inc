@@ -20,7 +20,11 @@ static int64_t DropCombo(void* character)
         return combo;
     // Adapt the native 16-hit eligibility decision only within this request.
     // The actual combo attribute and other readers are never rewritten.
-    return combo >= Config.dropComboHits ? (combo < 16 ? 16 : combo) : 0;
+    const int64_t adjusted = combo >= Config.dropComboHits ? (combo < 16 ? 16 : combo) : 0;
+    static volatile LONG evidence = 0;
+    if (combo != adjusted && SampleLiveEvidence(evidence))
+        Log("Live evidence: drop combo=%lld required=%d nativeInput=%lld.", static_cast<long long>(combo), Config.dropComboHits, static_cast<long long>(adjusted));
+    return adjusted;
 }
 
 static bool RequestDrop(void* manager, int item, const double* position, void* character)
@@ -49,8 +53,11 @@ static bool RequestDrop(void* manager, int item, const double* position, void* c
         if ((request[0x30] == 0 || request[0x30] == 4) && request[0x31] == At<uint8_t>(character, 0x750))
         {
             using RandomFn = int (*)();
-            const int roll = reinterpret_cast<RandomFn>(At<void*>(Image, 0x7E1C290))() & 0x7FFF;
+            const int roll = reinterpret_cast<RandomFn>(At<void*>(Image, GameRva<0x7E1C290>()))() & 0x7FFF;
             request[0x30] = roll < Config.meatBunPercent * 32768 / 100 ? 0 : 4;
+            static volatile LONG evidence = 0;
+            if (SampleLiveEvidence(evidence))
+                Log("Live evidence: random drop queued group=%d item=%s roll=%d bunChance=%d%%.", GroupIdFromCharacter(character), request[0x30] == 0 ? "meat bun" : "arrows", roll, Config.meatBunPercent);
         }
     }
     LeaveCriticalSection(lock);

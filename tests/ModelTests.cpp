@@ -1,4 +1,5 @@
 #include "Model.h"
+#include "HotkeyState.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -9,6 +10,21 @@ static bool Near(float a, float b) { return fabsf(a - b) < 0.001f; }
 
 int main()
 {
+    HotkeyState key;
+    CHECK(!key.Update(true, false));
+    CHECK(key.Update(true, true));
+    CHECK(!key.Update(true, true));
+    CHECK(!key.Update(true, false));
+    CHECK(key.Update(true, true));
+    CHECK(!key.Update(false, false));
+    CHECK(!key.Update(false, true));
+    CHECK(!key.Update(true, true)); // Refocusing with a held key must not toggle.
+    CHECK(!key.Update(true, false));
+    CHECK(key.Update(true, true));
+    HotkeyState heldAtStartup;
+    CHECK(!heldAtStartup.Update(true, true));
+    CHECK(!heldAtStartup.Update(true, false));
+    CHECK(heldAtStartup.Update(true, true));
     Settings settings;
     CorpsState corps;
     float morale = 400;

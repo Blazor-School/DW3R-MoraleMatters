@@ -1,6 +1,7 @@
 // Execute only the supported executable's isolated hit formula in this test process.
 // Engine lookups are stubbed; no game process is opened and no health is applied.
 #include "../src/Game.cpp"
+#include "GameTestAddresses.h"
 #include "../src/ExpectedBytes.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +10,7 @@ using namespace MoraleMatters;
 static int Assertions = 0;
 #define CHECK(expression) do { ++Assertions; if (!(expression)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expression); return 1; } } while (0)
 static bool Near(float a, float b) { return fabsf(a - b) < 0.002f; }
-alignas(16) static uint8_t Formation[0x100], Groups[2 * 0x2E68], CorpsMemory[2 * 0xEF8], Characters[2][0xB10], Rates[2][0x180], NativeConfig[0x800];
+alignas(16) static uint8_t Formation[0x100], Groups[2 * 0x2E70], CorpsMemory[2 * 0xEF8], Characters[2][0xB10], Rates[2][0x180], NativeConfig[0x800];
 static void* Vtable[0xC00 / 8];
 static bool NativeStatus = false;
 static LONG WINAPI FormulaException(EXCEPTION_POINTERS* error)
@@ -48,7 +49,7 @@ int main(int argc, char** argv)
     const auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(bytes);
     CHECK(dos->e_magic == IMAGE_DOS_SIGNATURE && dos->e_lfanew > 0 && dos->e_lfanew < length - 0x100);
     const auto* nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(bytes + dos->e_lfanew);
-    CHECK(nt->Signature == IMAGE_NT_SIGNATURE && nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64 && nt->OptionalHeader.SizeOfImage == 0xB39E000);
+    CHECK(nt->Signature == IMAGE_NT_SIGNATURE && nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64 && SelectTestGameBuild(nt->OptionalHeader.SizeOfImage));
     const size_t imageSize = nt->OptionalHeader.SizeOfImage;
     Image = static_cast<uint8_t*>(VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
     CHECK(Image != nullptr);
@@ -60,22 +61,24 @@ int main(int argc, char** argv)
         memcpy(Image + section[i].VirtualAddress, bytes + section[i].PointerToRawData, section[i].SizeOfRawData);
     }
     bool found = false;
-    for (const auto& expected : ExpectedHooks)
+    for (const auto& expected : GameExpectedHooks())
         if (expected.rva == 0x1534B60)
         {
-            CHECK(memcmp(Image + expected.rva, expected.bytes, sizeof(expected.bytes)) == 0);
+            CHECK(memcmp(Image + GameRva(expected.rva), expected.bytes, sizeof(expected.bytes)) == 0);
             found = true;
         }
     CHECK(found);
     free(bytes);
+    const auto nativeGroupStride = NativeTestGroupStride(Image);
+    CHECK(nativeGroupStride == BattleGroupStride());
     // These are the only engine lookups reached by the ordinary-hit fixture.
-    Jump(Image, 0x1453710, reinterpret_cast<void*>(&FakeConfig));
-    Jump(Image, 0x42A83E0, reinterpret_cast<void*>(&FakeNull));
-    Jump(Image, 0x1746710, reinterpret_cast<void*>(&FakeAttribute));
-    Jump(Image, 0x174F770, reinterpret_cast<void*>(&FakeGroup));
-    Jump(Image, 0x13AE060, reinterpret_cast<void*>(&FakeDead));
+    Jump(Image, TestRva<0x1453710>(), reinterpret_cast<void*>(&FakeConfig));
+    Jump(Image, TestRva<0x42A83E0>(), reinterpret_cast<void*>(&FakeNull));
+    Jump(Image, TestRva<0x1746710>(), reinterpret_cast<void*>(&FakeAttribute));
+    Jump(Image, TestRva<0x174F770>(), reinterpret_cast<void*>(&FakeGroup));
+    Jump(Image, TestRva<0x13AE060>(), reinterpret_cast<void*>(&FakeDead));
     FlushInstructionCache(GetCurrentProcess(), Image, imageSize);
-    OriginalOnscreenHit = reinterpret_cast<OnscreenHitFn>(Image + 0x1534B60);
+    OriginalOnscreenHit = reinterpret_cast<OnscreenHitFn>(Image + TestRva<0x1534B60>());
     memset(Formation, 0, sizeof(Formation));
     memset(Groups, 0, sizeof(Groups));
     memset(CorpsMemory, 0, sizeof(CorpsMemory));
@@ -83,9 +86,10 @@ int main(int argc, char** argv)
     At<int>(Formation, 0x70) = 2;
     At<void*>(Formation, 0x78) = Groups;
     At<int>(Formation, 0x80) = 2;
-    Vtable[0xA58 / 8] = reinterpret_cast<void*>(&FakePower);
-    Vtable[0xA70 / 8] = reinterpret_cast<void*>(&FakePower);
-    Vtable[0xA18 / 8] = reinterpret_cast<void*>(&FakeHealth);
+    const size_t characterVtableShift = ActiveGameBuild == GameBuild::Patch110 ? 1 : 0;
+    Vtable[0xA58 / 8 + characterVtableShift] = reinterpret_cast<void*>(&FakePower);
+    Vtable[0xA70 / 8 + characterVtableShift] = reinterpret_cast<void*>(&FakePower);
+    Vtable[0xA18 / 8 + characterVtableShift] = reinterpret_cast<void*>(&FakeHealth);
     for (int id = 0; id < 2; ++id)
     {
         At<void*>(Characters[id], 0) = Vtable;
@@ -93,14 +97,15 @@ int main(int argc, char** argv)
         At<int>(Characters[id], 0x7A0) = id;
         At<int>(Characters[id], 0x7A4) = -1;
         At<uint8_t>(Characters[id], 0x74C) = 2;
-        At<int>(Groups + id * 0x2E68, 0x38) = id;
-        At<int>(Groups + id * 0x2E68, 0x3C) = id;
-        At<uint8_t>(Groups + id * 0x2E68, 0x2D20) = 3;
+        At<int>(Groups + id * nativeGroupStride, 0x38) = id;
+        At<int>(Groups + id * nativeGroupStride, 0x3C) = id;
+        At<uint8_t>(Groups + id * nativeGroupStride, 0x2D20) = 3;
         At<float>(Rates[id], 0xF8) = At<float>(Rates[id], 0xFC) = 1;
         At<float>(Rates[id], 0x108) = At<float>(Rates[id], 0x10C) = 1;
     }
     ResetBattle(Formation);
     CHECK(GroupCount() == 2 && CorpsCount() == 2);
+    CHECK(Group(1) == Groups + nativeGroupStride && At<int>(Group(1), 0x38) == 1);
     Config.namedOfficerScale = 1;
     const float outgoing[] = {0.30f, 0.55f, 1, 1.60f, 2.50f};
     const float incoming[] = {1.90f, 1.45f, 1, 0.75f, 0.45f};

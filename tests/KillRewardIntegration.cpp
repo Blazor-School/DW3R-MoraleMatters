@@ -1,12 +1,13 @@
 // Exercise production resolution/kill/morale callbacks with synthetic formations.
 #include "../src/Game.cpp"
+#include "GameTestAddresses.h"
 #include <stdio.h>
 
 using namespace MoraleMatters;
 static int Assertions = 0;
 #define CHECK(expression) do { ++Assertions; if (!(expression)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expression); return 1; } } while (0)
 static bool Near(float a, float b) { return fabsf(a - b) < 0.001f; }
-alignas(16) static uint8_t ManagerMemory[0x100], GroupMemory[10 * 0x2E68], CorpsMemory[3 * 0xEF8];
+alignas(16) static uint8_t ManagerMemory[0x100], GroupMemory[10 * 0x2E70], CorpsMemory[3 * 0xEF8];
 static uint8_t DeadMembers[10][64];
 struct Death { int group; bool leader; int member; int flags; };
 static Death Deaths[64];
@@ -101,7 +102,7 @@ static void Setup(float morale = 400)
     }
     for (int id = 0; id < 10; ++id)
     {
-        void* group = GroupMemory + id * 0x2E68;
+        void* group = GroupMemory + id * FixtureGroupStride;
         const int corps = id < 5 ? 0 : id < 8 ? 1 : 2;
         At<void*>(group, 0x28) = ManagerMemory;
         At<int>(group, 0x3C) = id;
@@ -141,8 +142,9 @@ static DWORD WINAPI WorkerResolve(void* index)
     return 0;
 }
 
-int main()
+int main(int argc, char** argv)
 {
+    CHECK(SelectBattleFixture(argc, argv));
     Setup();
     Plan(0);
     Resolve();

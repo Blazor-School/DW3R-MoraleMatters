@@ -20,7 +20,7 @@
         <RoarCard Appreance="CardAppreance.FilledOutlined">
             <DataAnnotationsValidator />
             <div class="wa-cluster wa-flex-nowrap">
-                <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="folder" />
+                <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CurrentTheme.Tokens.Variants[RoarVariant.Brand].Color" Name="folder" />
                 <label>Game folder</label>
                 <RoarInputText style="flex-grow: 1" @bind-Value="GameFolderForm.GamePath" ReadOnly />
                 <RoarButton @onclick="BrowseGameFolderAsync" Variant="ButtonVariant.Brand">Browse</RoarButton>
@@ -31,14 +31,14 @@
     <div class="wa-flank:end wa-align-items-stretch wa-flex-nowrap" style="--flank-size: 30rem; flex: 1; min-height: 0;">
         <RoarCard class="settings-card" Appreance="CardAppreance.FilledOutlined">
             <div class="wa-flank" style="flex-shrink: 0;">
-                <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="gear" />
+                <RoarIcon Size="@IconSize.L" Color="@ThemeService.CurrentTheme.Tokens.Variants[RoarVariant.Brand].Color" Name="gear" />
                 <div class="wa-heading-xl">Mod Settings</div>
             </div>
 
             @if (string.IsNullOrEmpty(LocalModVersion))
             {
                 <div class="wa-stack wa-text-center wa-align-items-center wa-justify-content-center wa-gap-l" style="flex: 1; min-height: 0; overflow-y: auto;">
-                    <RoarIcon Name="sliders" class="wa-border-radius-l" style="font-size: 3rem;" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" />
+                    <RoarIcon Name="sliders" class="wa-border-radius-l" style="font-size: 3rem;" Color="@ThemeService.CurrentTheme.Tokens.Variants[RoarVariant.Brand].Color" />
 
                     <div class="wa-heading-l">Install MoraleMatters to get started</div>
 
@@ -308,6 +308,8 @@
                                     <div class="wa-stack wa-gap-xs">
                                         <RoarSwitch @bind-Value="SettingForm.BehaviorLocalRegroup" Disabled="@(!SettingForm.BehaviorEnabled)" Hint="Ordinary infantry regroup at low morale or after defeat shock. Named officers keep their strategic orders.">Infantry regrouping</RoarSwitch>
                                         <ValidationMessage For="() => SettingForm.BehaviorLocalRegroup" />
+                                        <RoarSwitch @bind-Value="SettingForm.BehaviorCorpsBreak" Disabled="@(!SettingForm.BehaviorEnabled || !SettingForm.BehaviorLocalRegroup)" Hint="Ordinary troops fall back or defend at the Very Low combat morale anchor and rally after holding the Low anchor for three seconds.">Corps break and rally</RoarSwitch>
+                                        <ValidationMessage For="() => SettingForm.BehaviorCorpsBreak" />
                                     </div>
                                     <div class="wa-grid wa-align-items-start" style="--min-column-size: 10rem;">
                                         <div class="wa-stack wa-gap-xs">
@@ -454,10 +456,72 @@
                         <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
                             <div slot="@DetailsSlot.Summary">
                                 <div class="wa-heading-l">
+                                    <RoarIcon Name="shield" />
+                                    Guard Pressure
+                                </div>
+                                <div class="wa-body-s">Blocked player melee attacks weaken enemy guards. Charge attacks add more pressure. A guard break creates a short opening and can make nearby infantry hesitate. High morale improves recovery and shortens hesitation.</div>
+                            </div>
+                            <div class="wa-stack wa-gap-xs">
+                                <RoarSwitch @bind-Value="SettingForm.GuardPressureEnabled" Hint="Independent of morale-driven behavior and damage scaling. Player and allied guards keep their native rules.">Enable Guard Pressure</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.GuardPressureEnabled" />
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <RoarSwitch @bind-Value="SettingForm.GuardPressureShowPressureBar" Hint="Show gold fortitude shields above up to three pressured enemies.">Show guard shields</RoarSwitch>
+                                    <RoarSwitch @bind-Value="SettingForm.GuardPressureShowBreakIndicator" Hint="Flash and split the shields with a larger GUARD BROKEN message.">Guard-break animation</RoarSwitch>
+                                    <RoarInputNumber @bind-Value="SettingForm.GuardPressureIndicatorSeconds" Label="Break indicator duration (s)" min="0.3" max="3" step="0.1" />
+                                    <ValidationMessage For="() => SettingForm.GuardPressureIndicatorSeconds" />
+                                </div>
+                                <div class="wa-grid wa-align-items-start">
+                                    <RoarSwitch @bind-Value="SettingForm.GuardPressureBreakSound" Hint="Play sounds for blocked hits and guard breaks.">Guard-hit and break sounds</RoarSwitch>
+                                    <RoarSlider @bind-Value="SettingForm.GuardPressureHitVolumePercent" WithTooltip ValueTooltipTemplate="{value}%" Label="Blocked hit volume (%)" Min="0" Max="100" />
+                                    <ValidationMessage For="() => SettingForm.GuardPressureHitVolumePercent" />
+                                    <RoarSlider @bind-Value="SettingForm.GuardPressureBreakVolumePercent" WithTooltip ValueTooltipTemplate="{value}%" Label="Guard break volume (%)" Min="0" Max="100" />
+                                    <ValidationMessage For="() => SettingForm.GuardPressureBreakVolumePercent" />
+                                </div>
+                                <div class="wa-grid wa-align-items-start" style="--min-column-size: 16rem;">
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureNormalPressure" Label="Pressure per blocked normal hit" min="0.1" max="20" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureNormalPressure" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureChargePressure" Label="Pressure per blocked charge hit" min="0.1" max="40" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureChargePressure" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureSoldierThreshold" Label="Ordinary soldier break threshold" min="1" max="100" step="1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureSoldierThreshold" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureEliteThreshold" Label="Elite troop break threshold" min="1" max="100" step="1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureEliteThreshold" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureOfficerThreshold" Label="Named officer break threshold" min="1" max="100" step="1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureOfficerThreshold" />
+                                    </div>
+                                    <div class="wa-stack wa-gap-xs">
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureRecoveryDelaySeconds" Label="Recovery delay (s)" Hint="Time without blocking before pressure starts to recover." min="0" max="10" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureRecoveryDelaySeconds" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureRecoveryPerSecond" Label="Pressure recovery per second" Hint="Half this rate at very low morale; 1.5 times at very high morale." min="0" max="20" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureRecoveryPerSecond" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureOpeningSeconds" Label="Opening after a break (s)" Hint="The enemy cannot block ordinary player melee hits during this window." min="0.1" max="3" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureOpeningSeconds" />
+                                        <RoarInputNumber @bind-Value="SettingForm.GuardPressureBreakCooldownSeconds" Label="Break cooldown after opening (s)" min="0.5" max="20" step="0.1" />
+                                        <ValidationMessage For="() => SettingForm.GuardPressureBreakCooldownSeconds" />
+                                    </div>
+                                </div>
+                                <RoarSwitch @bind-Value="SettingForm.GuardPressureLocalDisruption" Hint="After guard break occurs on a soldier, nearby soldiers (excluding named officers) will hesitate for attacking.">Local disruption after a break</RoarSwitch>
+                                <ValidationMessage For="() => SettingForm.GuardPressureLocalDisruption" />
+                                <div class="wa-grid wa-align-items-start">
+                                    <RoarInputNumber @bind-Value="SettingForm.GuardPressureDisruptionRadiusMetres" Label="Disruption radius (m)" min="0.5" max="10" step="0.5" />
+                                    <ValidationMessage For="() => SettingForm.GuardPressureDisruptionRadiusMetres" />
+                                    <RoarInputNumber @bind-Value="SettingForm.GuardPressureDisruptionSeconds" Label="Base hesitation (s)" Hint="Longer at low morale and shorter at high morale." min="0.1" max="3" step="0.1" />
+                                    <ValidationMessage For="() => SettingForm.GuardPressureDisruptionSeconds" />
+                                    <RoarInputNumber @bind-Value="SettingForm.GuardPressureDisruptionCooldownSeconds" Label="Disruption cooldown (s)" Hint="Limits repeated pulses from a group and repeated hesitation of a soldier." min="1" max="30" step="0.5" />
+                                    <ValidationMessage For="() => SettingForm.GuardPressureDisruptionCooldownSeconds" />
+                                    <RoarInputNumber @bind-Value="SettingForm.GuardPressureDisruptionMaxTargets" Label="Maximum nearby troops" min="0" max="16" step="1" />
+                                    <ValidationMessage For="() => SettingForm.GuardPressureDisruptionMaxTargets" />
+                                </div>
+                            </div>
+                        </RoarDetails>
+                        <RoarDetails Appearance="DetailsAppearance.FilledOutlined">
+                            <div slot="@DetailsSlot.Summary">
+                                <div class="wa-heading-l">
                                     <RoarIcon Name="recycle" />
                                     Weapon fusion
                                 </div>
-                                <div class="wa-body-s">Improved fusion for officer and bodyguard weapons. Press F6 in the game's base-weapon selection screen to switch inventories.</div>
+                                <div class="wa-body-s">Applies the same fusion rules to officer and bodyguard weapons. Select Weapon Fusion under Bodyguard in Equipment at Camp or before a stage.</div>
                             </div>
                             <div class="wa-stack wa-gap-xs">
                                 <RoarSwitch @bind-Value="SettingForm.WeaponFusionEnabled">Enable improved weapon fusion mechanics.</RoarSwitch>
@@ -884,7 +948,7 @@
         <div class="wa-stack" style="min-height: 0; overflow-y: auto;">
             <RoarCard Orientation="CardOrientation.Vertical" Appreance="CardAppreance.FilledOutlined">
                 <div class="wa-flank">
-                    <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="download" />
+                    <RoarIcon Size="@IconSize.L" Color="@ThemeService.CurrentTheme.Tokens.Variants[RoarVariant.Brand].Color" Name="download" />
                     <div class="wa-split">
                         <div class="wa-heading-xl">Mod Installation</div>
 
@@ -912,7 +976,7 @@
                 {
                     <div class="wa-body">Changelog</div>
                     <RoarCard Appreance="CardAppreance.FilledOutlined">
-                        @SelectedModAsset.NotesMarkdown
+                        <RoarMarkdown Content="@SelectedModAsset.NotesMarkdown" />
                     </RoarCard>
                 }
 
@@ -931,7 +995,7 @@
             <RoarCard Orientation="CardOrientation.Vertical" Appreance="CardAppreance.FilledOutlined">
                 <div class="wa-stack">
                     <div class="wa-flank">
-                        <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Warning].Color" Name="circle-info" />
+                        <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CurrentTheme.Tokens.Variants[RoarVariant.Warning].Color" Name="circle-info" />
                         <div class="wa-body-m">Keep the game closed during installion.</div>
                     </div>
                     <div class="wa-flank">
@@ -991,7 +1055,7 @@
     {
         if (Application.Current is App app)
         {
-            if (!GameFolderEditContext.Validate())
+            if (!await GameFolderEditContext.ValidateAsync())
             {
                 app.TitleBar.Subtitle = "Game not found.";
             }
@@ -1044,18 +1108,28 @@
 
     public async Task SaveSettingAsync()
     {
-        if (SettingEditContext.Validate())
+        try
         {
-            await ModService.SaveModSettingsAsync(GameFolderForm.GamePath, SettingForm);
-            await Toast.CreateAsync("Save successfully. Take effect after restarting the game.", new()
+            if (await SettingEditContext.ValidateAsync())
             {
-                Variant = ToastVariant.Success,
-            });
-            SettingEditContext.MarkAsUnmodified();
+                await ModService.SaveModSettingsAsync(GameFolderForm.GamePath, SettingForm);
+                await Toast.CreateAsync("Save successfully. Take effect after restarting the game.", new()
+                {
+                    Variant = ToastVariant.Success,
+                });
+                SettingEditContext.MarkAsUnmodified();
+            }
+            else
+            {
+                await Toast.CreateAsync("Settings contain invalid values", new()
+                {
+                    Variant = ToastVariant.Danger,
+                });
+            }
         }
-        else
+        catch (Exception ex)
         {
-            await Toast.CreateAsync("Settings contain invalid values", new()
+            await Toast.CreateAsync($"Failed to save settings: {ex.Message}", new()
             {
                 Variant = ToastVariant.Danger,
             });

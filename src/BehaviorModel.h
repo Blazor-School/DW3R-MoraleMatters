@@ -10,6 +10,7 @@ namespace MoraleMatters
         bool profiles = true;
         bool cohesion = true;
         bool regroup = true;
+        bool corpsBreak = false;
         bool panic = true;
         bool recovery = true;
         bool leadership = true;
@@ -63,8 +64,9 @@ namespace MoraleMatters
         float shockRemaining = 0;
         float regroupDuration = 0;
         bool commanderNear = false;
+        bool corpsBroken = false;
 
-        void Advance(float seconds, float morale, bool eligible, const BehaviorSettings& settings)
+        void Advance(float seconds, float morale, bool eligible, const BehaviorSettings& settings, bool regroupForMorale = true)
         {
             if (!isfinite(seconds) || seconds <= 0)
                 return;
@@ -76,7 +78,7 @@ namespace MoraleMatters
                 regroupRemaining = 0;
                 return;
             }
-            if (cooldown == 0 && (morale <= settings.regroupBelow || shockRemaining > 0))
+            if (cooldown == 0 && ((regroupForMorale && morale <= settings.regroupBelow) || shockRemaining > 0))
             {
                 regroupRemaining = settings.regroupSeconds;
                 regroupDuration = settings.regroupSeconds;
@@ -85,8 +87,57 @@ namespace MoraleMatters
         }
     };
 
+    struct CorpsBreakState
+    {
+        static constexpr float RallyHoldSeconds = 3;
+        static constexpr float RallySeconds = 3.25f;
+        bool broken = false;
+        float brokenSeconds = 0;
+        float holdSeconds = 0;
+        float rallyRemaining = 0;
+
+        void Advance(float seconds, float morale, float veryLow)
+        {
+            if (!isfinite(seconds) || seconds <= 0 || !isfinite(morale))
+                return;
+            if (!broken)
+            {
+                if (morale <= veryLow)
+                {
+                    broken = true;
+                    brokenSeconds = rallyRemaining > 0 ? 2 : 0;
+                    rallyRemaining = 0;
+                }
+                else
+                    rallyRemaining = fmaxf(0, rallyRemaining - seconds);
+                return;
+            }
+            brokenSeconds = fminf(2, brokenSeconds + seconds);
+            holdSeconds = morale > veryLow ? holdSeconds + seconds : 0;
+            if (holdSeconds >= RallyHoldSeconds)
+            {
+                broken = false;
+                rallyRemaining = RallySeconds;
+                holdSeconds = 0;
+            }
+        }
+
+        static float Stagger(int group) { return static_cast<float>((static_cast<unsigned>(group) * 13) % 7) / 6; }
+        static float RallyRelease(int group) { return 0.25f + 1.25f * Stagger(group); }
+        bool Withdrawing(int group) const { return broken && brokenSeconds >= 0.6f * Stagger(group); }
+        bool Rejoining(int group) const { return !broken && rallyRemaining > RallyRelease(group); }
+
+        float WithdrawalBlend(int group) const
+        {
+            if (Withdrawing(group))
+                return Clamp((brokenSeconds - 0.6f * Stagger(group)) / 0.8f, 0, 1);
+            return Rejoining(group) ? Clamp((rallyRemaining - RallyRelease(group)) / (RallySeconds - RallyRelease(group)), 0, 1) : 0;
+        }
+    };
+
     struct CorpsBehaviorState
     {
+        CorpsBreakState formation;
         float sampleTime = 0;
         float quietTime = 0;
         float panicRemaining = 0;

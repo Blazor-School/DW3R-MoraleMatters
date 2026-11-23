@@ -1,7 +1,7 @@
 -- Battle-time-only observation and objectives. No engine access or inferred morale causes.
 local Experience = {}
 local reasons = {[1]="Battle event", [2]="Casualties", [3]="Officer defeated", [4]="Nearby defeat panic", [5]="Recovering", [6]="Reinforcements arrived", [7]="Surprise force arrived", [8]="Allied support", [9]="Support expired", [10]="Rescue completed", [11]="Off-screen victories", [12]="Captain defeated", [13]="Enemy corps nearby", [14]="Enemy corps separated"}
-local phases = {[1]="Falling back", [2]="Reforming", [3]="Rejoining"}
+local phases = {[1]="Falling back", [2]="Reforming", [3]="Rejoining", [4]="Line broken", [5]="Rallying"}
 
 local function distance(a, b)
     local dx, dy = a.x-b.x, a.y-b.y

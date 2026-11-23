@@ -19,21 +19,30 @@ namespace
     {
         const char* sha256;
         DWORD sizeOfImage;
+        MoraleMatters::GameBuild build;
     };
     constexpr SupportedExecutable SupportedExecutables[] = {
-        {"b57a2d4cbd01c9c5abd651fa42f43a4b8fdae88da6403106cd5f5c1bf4dade70", 0x0B39E000},
-        {"ca1a65a53242a7cf42493bd2006b8c555d87597387468e4b7a07c52d4eefe92e", 0x0B3D8000},
+        {"b57a2d4cbd01c9c5abd651fa42f43a4b8fdae88da6403106cd5f5c1bf4dade70", 0x0B39E000, MoraleMatters::GameBuild::Legacy},
+        {"ca1a65a53242a7cf42493bd2006b8c555d87597387468e4b7a07c52d4eefe92e", 0x0B3D8000, MoraleMatters::GameBuild::Legacy},
+        {"8a3644a0e002ece5867c2f49720a4ed05900af7e09d10d39f8404b6086382849", 0x0B3C9000, MoraleMatters::GameBuild::Patch110},
+        {"b6c1023db00b858927d4eeb2a71f8bfc42a3f55ef3ab2aebf3c5f4ec75e390bc", 0x0B403000, MoraleMatters::GameBuild::Patch110},
     };
 
-    const SupportedExecutable* FindSupportedExecutable(const char* hash)
+#include "HashExecutable.inc"
+
+    const SupportedExecutable* FindSupportedExecutable(const wchar_t* path)
     {
+        const wchar_t* name = wcsrchr(path, L'\\');
+        if (!name || (_wcsicmp(name + 1, L"DW3CE_RE-Win64-Shipping.exe") != 0 && _wcsicmp(name + 1, L"DW3CE_RE-Win64-Shipping.tnk.exe") != 0))
+            return nullptr;
+        char hash[65];
+        if (!HashExecutable(path, hash))
+            return nullptr;
         for (const auto& executable : SupportedExecutables)
             if (strcmp(hash, executable.sha256) == 0)
                 return &executable;
         return nullptr;
     }
-
-#include "HashExecutable.inc"
 
     bool Boolean(const wchar_t* section, const wchar_t* key, bool fallback)
     {
@@ -55,10 +64,30 @@ namespace
     {
         using namespace MoraleMatters;
         Config.enabled = Boolean(L"General", L"Enabled", true);
+        Config.liveEvidence = Boolean(L"General", L"LiveEvidence", false);
         Config.offscreen = Boolean(L"Offscreen", L"Enabled", true);
         Config.support = Boolean(L"Support", L"Enabled", true);
         Config.casualties = Boolean(L"Casualties", L"Enabled", true);
         Config.attributes = Boolean(L"Combat", L"Enabled", true);
+        GuardPressure.enabled = Boolean(L"GuardPressure", L"Enabled", true);
+        GuardPressure.normalPressure = Number(L"GuardPressure", L"NormalPressure", 1, 0.1f, 20);
+        GuardPressure.chargePressure = Number(L"GuardPressure", L"ChargePressure", 3, 0.1f, 40);
+        GuardPressure.soldierThreshold = Number(L"GuardPressure", L"SoldierThreshold", 6, 1, 100);
+        GuardPressure.eliteThreshold = Number(L"GuardPressure", L"EliteThreshold", 9, 1, 100);
+        GuardPressure.officerThreshold = Number(L"GuardPressure", L"OfficerThreshold", 12, 1, 100);
+        GuardPressure.recoveryDelay = Number(L"GuardPressure", L"RecoveryDelaySeconds", 2, 0, 10);
+        GuardPressure.recoveryPerSecond = Number(L"GuardPressure", L"RecoveryPerSecond", 2, 0, 20);
+        GuardPressure.openingSeconds = Number(L"GuardPressure", L"OpeningSeconds", 0.9f, 0.1f, 3);
+        GuardPressure.breakCooldown = Number(L"GuardPressure", L"BreakCooldownSeconds", 3, 0.5f, 20);
+        GuardPressure.disruption = Boolean(L"GuardPressure", L"LocalDisruption", true);
+        GuardPressure.disruptionRadius = Number(L"GuardPressure", L"DisruptionRadiusMetres", 4, 0.5f, 10) * 100;
+        GuardPressure.disruptionSeconds = Number(L"GuardPressure", L"DisruptionSeconds", 0.8f, 0.1f, 3);
+        GuardPressure.disruptionCooldown = Number(L"GuardPressure", L"DisruptionCooldownSeconds", 4, 1, 30);
+        GuardPressure.disruptionTargets = static_cast<int>(Number(L"GuardPressure", L"DisruptionMaxTargets", 6, 0, 16));
+        GuardPressure.showPressureBar = Boolean(L"GuardPressure", L"ShowPressureBar", true);
+        GuardPressure.showBreakIndicator = Boolean(L"GuardPressure", L"ShowBreakIndicator", true);
+        GuardPressure.breakSound = Boolean(L"GuardPressure", L"BreakSound", true);
+        GuardPressure.indicatorSeconds = Number(L"GuardPressure", L"IndicatorSeconds", 1.2f, 0.3f, 3);
         Config.reinforcements = Boolean(L"Reinforcements", L"Enabled", true);
         Config.surpriseForces = Boolean(L"SurpriseForces", L"Enabled", true);
         Config.scriptedEventMoraleBonusPercent = Number(L"SurpriseForces", L"ScriptedEventMoraleBonusPercent", 30, 0, 100);
@@ -87,6 +116,7 @@ namespace
         Behavior.profiles = Boolean(L"Behavior", L"AIProfiles", true);
         Behavior.cohesion = Boolean(L"Behavior", L"FormationCohesion", true);
         Behavior.regroup = Boolean(L"Behavior", L"LocalRegroup", true);
+        Behavior.corpsBreak = Boolean(L"Behavior", L"CorpsBreak", true);
         Behavior.panic = Boolean(L"Behavior", L"DefeatPanic", true);
         Behavior.recovery = Boolean(L"Behavior", L"MoraleRecovery", true);
         Behavior.leadership = Boolean(L"Behavior", L"CommanderLeadership", true);
@@ -167,7 +197,9 @@ namespace
         swprintf(logPath, 32768, L"%ls\\MoraleMatters.log", path);
         LogFile = CreateFileW(logPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         ReadSettings();
-        Log("Morale Matters 1.8.2. Officer share=%.2f rally=%.0f/%.0fs healing=%.0f%% cooldown=%.0fs.", Config.officerDamageShare, Config.rallyBonus, Config.rallyDuration, Config.healFraction * 100, Config.healCooldown);
+        Log("Morale Matters 1.9.0. Officer share=%.2f rally=%.0f/%.0fs healing=%.0f%% cooldown=%.0fs.", Config.officerDamageShare, Config.rallyBonus, Config.rallyDuration, Config.healFraction * 100, Config.healCooldown);
+        Log("Guard pressure: enabled=%d normal=%.1f charge=%.1f thresholds=%.1f/%.1f/%.1f opening=%.2fs disruption=%d radius=%.1fm targets=%d.", GuardPressure.enabled, GuardPressure.normalPressure, GuardPressure.chargePressure, GuardPressure.soldierThreshold, GuardPressure.eliteThreshold, GuardPressure.officerThreshold, GuardPressure.openingSeconds, GuardPressure.disruption, GuardPressure.disruptionRadius / 100, GuardPressure.disruptionTargets);
+        Log("Guard feedback: bars=%d indicator=%d sound=%d indicatorDuration=%.2fs (UE4SS HUD).", GuardPressure.showPressureBar, GuardPressure.showBreakIndicator, GuardPressure.breakSound, GuardPressure.indicatorSeconds);
         Log("Battlefield: phasedRegroup=%d withdrawal=%.0fm reformScale=%.2f rescue=%d reward=%.0f battleCap=%.0f.", Behavior.withdrawal, Behavior.withdrawalDistance / 100, Behavior.withdrawalScale, Experience.rescue, Experience.rescueReward, Experience.rescueBattleCap);
         Log("Supplies/cohesion: drops=%d comboHits=%d meatBunPercent=%d enemyProximity=%d radius=%.0fm bonus=%.0f (mutual living leaders; no separation grace).", Config.meatBuns, Config.dropComboHits, Config.meatBunPercent, Config.enemyProximity, Config.enemyProximityRadius / 100, Config.enemyProximityBonus);
         Log("Off-screen kill rewards: enabled=%d soldier=%.2f elite=%.2f captain=%.2f officer=%.2f cap=%.2f window=%.2fs (native gains credited).", KillRewards.enabled, KillRewards.soldier, KillRewards.elite, KillRewards.captain, KillRewards.officer, KillRewards.cap, KillRewards.seconds);
@@ -188,9 +220,7 @@ namespace
         wchar_t executable[32768];
         if (!GetModuleFileNameW(nullptr, executable, 32768))
             return 0;
-        const wchar_t* name = wcsrchr(executable, L'\\');
-        char hash[65];
-        const auto* supported = name && _wcsicmp(name + 1, L"DW3CE_RE-Win64-Shipping.exe") == 0 && HashExecutable(executable, hash) ? FindSupportedExecutable(hash) : nullptr;
+        const auto* supported = FindSupportedExecutable(executable);
         if (!supported)
         {
             Log("NOT APPLIED: unsupported host or executable SHA-256. No game hooks installed.");
@@ -206,11 +236,13 @@ namespace
             InterlockedExchange(&Status, 3);
             return 0;
         }
-        for (const auto& expected : ExpectedHooks)
+        ActiveGameBuild = supported->build;
+        for (const auto& expected : GameExpectedHooks())
         {
-            if (memcmp(Image + expected.rva, expected.bytes, sizeof(expected.bytes)))
+            const auto rva = GameRva(expected.rva);
+            if (!rva || memcmp(Image + rva, expected.bytes, sizeof(expected.bytes)))
             {
-                Log("NOT APPLIED: code differs at RVA %llx; possible conflicting mod.", static_cast<unsigned long long>(expected.rva));
+                Log("NOT APPLIED: code differs at RVA %llx; possible conflicting mod.", static_cast<unsigned long long>(rva));
                 InterlockedExchange(&Status, 3);
                 return 0;
             }

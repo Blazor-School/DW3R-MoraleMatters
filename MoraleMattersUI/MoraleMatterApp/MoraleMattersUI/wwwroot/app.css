@@ -148,6 +148,7 @@ h1:focus {
 .table-input {
     width: 100%;
     table-layout: fixed;
+    min-width: 70rem;
 }
 
     .table-input wa-number-input {

@@ -2,8 +2,10 @@
 
 #include <windows.h>
 #include <stdint.h>
+#include "GameBuild.h"
 #include "Model.h"
 #include "BehaviorModel.h"
+#include "GuardPressureModel.h"
 #include "KillRewardModel.h"
 #include "Experience.h"
 
@@ -11,6 +13,7 @@ namespace MoraleMatters
 {
     extern Settings Config;
     extern BehaviorSettings Behavior;
+    extern GuardPressureSettings GuardPressure;
     extern OffscreenKillSettings KillRewards;
     extern uint8_t* Image;
     extern CorpsState Corps[MaxCorps];
@@ -19,7 +22,9 @@ namespace MoraleMatters
     void Log(const char* format, ...);
     bool Readable(const void* address, size_t bytes);
     bool InitializeGameHooks();
-    int WeaponFusionMenu(void* manager, bool toggle);
+    int WeaponFusionMenu(void* manager, bool toggle, int* stock = nullptr);
+    bool BodyguardFusionAvailable();
+    bool AddBodyguardFusionRow(void* manager, void* row);
     void ResetBattle(void* manager);
     void* Manager();
     void* Group(int id);
@@ -37,6 +42,24 @@ namespace MoraleMatters
     bool SetCharacterHealth(void* character, float value);
     void ClassifyUnit(int unit, bool elite);
     int RegroupPhase(int group);
+    int InfantryBreakPhase(int group, int member);
+    bool SetInfantryControl(void* character, int object, bool acquire, bool disarm);
+    int CorpsRallyPhase(int corps);
+
+    struct GuardFeedback
+    {
+        uint64_t token;
+        int group;
+        int member;
+        double x, y, z;
+        float pressure, threshold, opening, hitFlash, breakFlash;
+        unsigned long breakSequence;
+        uint64_t hitSequence;
+        int objectIndex;
+        bool refilled;
+    };
+    int CollectGuardFeedback();
+    bool ReadGuardFeedback(int index, GuardFeedback& result);
 
     template <typename T> inline T& At(void* object, size_t offset)
     {

@@ -1,4 +1,6 @@
 #include "Game.h"
+#include "HotkeyState.h"
+#include "GuardSound.h"
 #include <string.h>
 
 // No second Lua runtime is linked into the game. Resolve the installed UE4SS runtime's
@@ -16,6 +18,44 @@ namespace
     ToNumberFn ToNumber = nullptr;
     PushIntegerFn PushInteger = nullptr;
     PushNumberFn PushNumber = nullptr;
+    enum HotkeyCapture : LONG { Unbound, Listening, Pressed };
+    MoraleMatters::HotkeyState Hotkeys[256];
+    HHOOK HotkeyHook = nullptr;
+    DWORD HotkeyThread = 0;
+    volatile LONG CapturedKeys[256]{};
+
+    LRESULT CALLBACK TrackHotkeyMessage(int code, WPARAM removed, LPARAM parameter)
+    {
+        if (code >= 0 && removed == PM_REMOVE)
+        {
+            const auto& message = *reinterpret_cast<const MSG*>(parameter);
+            if ((message.message == WM_KEYDOWN || message.message == WM_SYSKEYDOWN) && message.wParam < 256 && !(message.lParam & (1L << 30)) && message.hwnd == GetForegroundWindow())
+                InterlockedCompareExchange(&CapturedKeys[message.wParam], Pressed, Listening);
+        }
+        return CallNextHookEx(nullptr, code, removed, parameter);
+    }
+
+    bool ReadHotkey(int key)
+    {
+        DWORD process = 0;
+        const DWORD thread = GetWindowThreadProcessId(GetForegroundWindow(), &process);
+        const bool focused = process == GetCurrentProcessId();
+        if (focused && thread != HotkeyThread)
+        {
+            if (HotkeyHook)
+                UnhookWindowsHookEx(HotkeyHook);
+            HotkeyThread = thread;
+            HotkeyHook = SetWindowsHookExW(WH_GETMESSAGE, TrackHotkeyMessage, nullptr, thread);
+            if (MoraleMatters::Config.liveEvidence)
+                MoraleMatters::Log("Live evidence: hotkey message capture installed=%d on game window thread.", HotkeyHook != nullptr);
+        }
+        if (!HotkeyHook)
+            return Hotkeys[key].Update(focused, (GetAsyncKeyState(key) & 0x8000) != 0);
+        // The window thread only latches key-down events. Lua consumes them on the game thread.
+        InterlockedCompareExchange(&CapturedKeys[key], Listening, Unbound);
+        const bool pressed = InterlockedCompareExchange(&CapturedKeys[key], Listening, Pressed) == Pressed;
+        return focused && pressed;
+    }
 
     void* RelativeTarget(uint8_t* instruction)
     {
@@ -47,6 +87,7 @@ namespace
     void Number(lua_State* lua, double value) { PushNumber(lua, value); }
     int64_t Integer(lua_State* lua, int index) { return ToInteger(lua, index, nullptr); }
     double Numeric(lua_State* lua, int index) { return ToNumber(lua, index, nullptr); }
+
 }
 
 extern "C" __declspec(dllexport) LONG MoraleMatters_GetStatus();
@@ -85,7 +126,7 @@ extern "C" __declspec(dllexport) int MoraleMatters_Query(lua_State* lua)
         if (Readable(character, 0x8B2) && GroupIdFromCharacter(character) == static_cast<int>(Integer(lua, 2)) && MemberIdFromCharacter(character) == -1 && Readable(At<void*>(character, 0x698), 0x50))
         {
             using HealthFn = float (*)(void*);
-            const float live = reinterpret_cast<HealthFn>(Image + 0x17481D0)(character);
+            const float live = reinterpret_cast<HealthFn>(Image + GameRva<0x17481D0>())(character);
             if (isfinite(live))
                 health = live;
         }
@@ -120,7 +161,8 @@ extern "C" __declspec(dllexport) int MoraleMatters_Query(lua_State* lua)
         Number(lua, experience.seconds - experience.reasonTime);
         Number(lua, experience.seconds);
         Number(lua, Corps[id].proximityBonus > 0 ? 1 : 0);
-        return 11;
+        Number(lua, CorpsRallyPhase(id));
+        return 12;
     }
     if (operation == 4)
     {
@@ -227,7 +269,94 @@ extern "C" __declspec(dllexport) int MoraleMatters_Query(lua_State* lua)
     }
     if (operation == 14)
     {
-        Number(lua, WeaponFusionMenu(reinterpret_cast<void*>(Integer(lua, 2)), Integer(lua, 3) != 0));
+        int stock = 0;
+        PushInteger(lua, WeaponFusionMenu(reinterpret_cast<void*>(Integer(lua, 2)), Integer(lua, 3) != 0, &stock));
+        PushInteger(lua, stock);
+        return 2;
+    }
+    if (operation == 15)
+    {
+        Number(lua, CollectGuardFeedback());
+        Number(lua, ExperienceGeneration());
+        Number(lua, ExperienceTime());
+        return 3;
+    }
+    if (operation == 16)
+    {
+        GuardFeedback feedback;
+        if (!ReadGuardFeedback(static_cast<int>(Integer(lua, 2)) - 1, feedback))
+            return 0;
+        Number(lua, static_cast<double>(feedback.token));
+        Number(lua, feedback.group);
+        Number(lua, feedback.member);
+        Number(lua, feedback.x);
+        Number(lua, feedback.y);
+        Number(lua, feedback.z);
+        Number(lua, feedback.pressure);
+        Number(lua, feedback.threshold);
+        Number(lua, feedback.opening);
+        Number(lua, feedback.hitFlash);
+        Number(lua, feedback.breakFlash);
+        Number(lua, feedback.breakSequence);
+        Number(lua, static_cast<double>(feedback.hitSequence));
+        Number(lua, feedback.objectIndex);
+        Number(lua, feedback.refilled ? 1 : 0);
+        return 15;
+    }
+    if (operation == 17)
+    {
+        const int key = static_cast<int>(Integer(lua, 2));
+        if (key <= 0 || key >= 256)
+            return 0;
+        Number(lua, ReadHotkey(key) ? 1 : 0);
+        return 1;
+    }
+    if (operation == 18)
+    {
+        Number(lua, PlayGuardFeedbackSound(Integer(lua, 2) == 1, Numeric(lua, 3)) ? 1 : 0);
+        return 1;
+    }
+    if (operation == 19)
+    {
+        void* character = reinterpret_cast<void*>(Integer(lua, 2));
+        if (!character)
+        {
+            for (int corps = 0; corps < CorpsCount(); ++corps)
+            {
+                if (CorpsRallyPhase(corps) == 4)
+                {
+                    Number(lua, 1);
+                    return 1;
+                }
+            }
+            return 0;
+        }
+        const int id = GroupIdFromCharacter(character);
+        void* group = Group(id);
+        if (!group || At<uint8_t>(character, 0x74C) < 2)
+            return 0;
+        const int member = At<int>(character, 0x7A4);
+        const int phase = InfantryBreakPhase(id, member);
+        // The infantry scan also listens for hits to officers in broken corps.
+        // A negative phase keeps them out of the custom animation path.
+        if (phase < 0 && (!Integer(lua, 3) || CorpsRallyPhase(At<int>(group, 0x38)) != 4))
+            return 0;
+        Number(lua, phase);
+        Number(lua, id);
+        Number(lua, member);
+        Number(lua, At<int>(character, 0xC));
+        return 4;
+    }
+    if (operation == 20 || operation == 22)
+    {
+        Number(lua, SetInfantryControl(reinterpret_cast<void*>(Integer(lua, 2)), static_cast<int>(Integer(lua, 3)), Integer(lua, 4) != 0, operation == 22) ? 1 : 0);
+        return 1;
+    }
+    if (operation == 21)
+    {
+        void* manager = reinterpret_cast<void*>(Integer(lua, 2));
+        void* row = reinterpret_cast<void*>(Integer(lua, 3));
+        PushInteger(lua, manager ? AddBodyguardFusionRow(manager, row) : BodyguardFusionAvailable());
         return 1;
     }
     return 0;

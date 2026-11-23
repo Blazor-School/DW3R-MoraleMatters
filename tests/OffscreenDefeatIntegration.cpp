@@ -1,15 +1,18 @@
 // Production extra-damage/reward callbacks with the actual supported executable's
 // IsDead, group elimination and save/load instructions in an isolated process.
 #include "../src/Game.cpp"
+#include "GameTestAddresses.h"
 #include "../src/ExpectedBytes.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <initializer_list>
 
 using namespace MoraleMatters;
+static uint32_t NativeGroupStride;
 static int Assertions = 0;
 #define CHECK(expression) do { ++Assertions; if (!(expression)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expression); return 1; } } while (0)
 static bool Near(float a, float b) { return fabsf(a - b) < 0.002f; }
-alignas(16) static uint8_t Formation[0x100], Groups[4 * 0x2E68], CorpsMemory[2 * 0xEF8];
+alignas(16) static uint8_t Formation[0x100], Groups[4 * 0x2E70], CorpsMemory[2 * 0xEF8];
 static uint8_t DeadMembers[4][2];
 static void* Members[4][2];
 static int Children[3] = {2, 2, -1};
@@ -79,7 +82,7 @@ static void Setup(float hp = 10)
     }
     for (int id = 0; id < 4; ++id)
     {
-        void* group = Groups + id * 0x2E68;
+        void* group = Groups + id * NativeGroupStride;
         At<void*>(group, 0x28) = Formation;
         At<int>(group, 0x38) = id == 0 ? 1 : 0;
         At<int>(group, 0x3C) = id;
@@ -120,8 +123,16 @@ static void Noop() {}
 static void* EmptyDebug(void*) { static void* empty = nullptr; return &empty; }
 static void* CopyPosition(void*, void* output, void* input) { memcpy(output, input, 24); return output; }
 
+static LONG WINAPI Failure(PEXCEPTION_POINTERS error)
+{
+    const auto rip = error->ContextRecord->Rip;
+    fprintf(stderr, "Off-screen fixture exception %lx at image RVA %llx, test RVA %llx, address %llx after %d assertions.\n", error->ExceptionRecord->ExceptionCode, rip - reinterpret_cast<uintptr_t>(Image), rip - reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)), error->ExceptionRecord->ExceptionInformation[1], Assertions);
+    ExitProcess(1);
+}
+
 int main(int argc, char** argv)
 {
+    AddVectoredExceptionHandler(1, &Failure);
     CHECK(argc == 2);
     FILE* file = fopen(argv[1], "rb");
     CHECK(file != nullptr);
@@ -135,8 +146,9 @@ int main(int argc, char** argv)
     const auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(bytes);
     CHECK(dos->e_magic == IMAGE_DOS_SIGNATURE && dos->e_lfanew > 0 && dos->e_lfanew < length - 0x100);
     const auto* nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(bytes + dos->e_lfanew);
-    CHECK(nt->Signature == IMAGE_NT_SIGNATURE && nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64 && nt->OptionalHeader.SizeOfImage == 0xB39E000);
-    Image = static_cast<uint8_t*>(VirtualAlloc(nullptr, nt->OptionalHeader.SizeOfImage, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
+    CHECK(nt->Signature == IMAGE_NT_SIGNATURE && nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64 && SelectTestGameBuild(nt->OptionalHeader.SizeOfImage));
+    const auto imageSize = nt->OptionalHeader.SizeOfImage;
+    Image = static_cast<uint8_t*>(VirtualAlloc(nullptr, imageSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
     CHECK(Image != nullptr);
     const auto* sections = IMAGE_FIRST_SECTION(nt);
     for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i)
@@ -146,24 +158,26 @@ int main(int argc, char** argv)
         memcpy(Image + sections[i].VirtualAddress, bytes + sections[i].PointerToRawData, sections[i].SizeOfRawData);
     }
     free(bytes);
+    NativeGroupStride = NativeTestGroupStride(Image);
+    CHECK(NativeGroupStride == BattleGroupStride());
     bool guarded = false;
-    for (const auto& expected : ExpectedHooks)
+    for (const auto& expected : GameExpectedHooks())
         if (expected.rva == 0x13B11E0)
         {
-            CHECK(memcmp(Image + expected.rva, expected.bytes, sizeof(expected.bytes)) == 0);
+            CHECK(memcmp(Image + GameRva(expected.rva), expected.bytes, sizeof(expected.bytes)) == 0);
             guarded = true;
         }
     CHECK(guarded);
-    ActualDefeat = reinterpret_cast<GroupDefeatFn>(Image + 0x13B11E0);
-    Jump(0x13AEF80, reinterpret_cast<void*>(&Kill)); // Real native elimination enters production casualty/reward wrappers.
+    ActualDefeat = reinterpret_cast<GroupDefeatFn>(Image + TestRva<0x13B11E0>());
+    Jump(TestRva<0x13AEF80>(), reinterpret_cast<void*>(&Kill)); // Real native elimination enters production casualty/reward wrappers.
     // Save/load use real HP and flag serialization; unrelated helpers are substituted.
     // The writer relies on R8/RCX surviving its initialization helper.
-    Image[0x1283830] = 0xC3;
-    Jump(0x13B5490, reinterpret_cast<void*>(&CopyPosition));
-    Jump(0x13B2C10, reinterpret_cast<void*>(&Noop));
-    Jump(0x13B2D00, reinterpret_cast<void*>(&Noop));
-    Jump(0x1A363B0, reinterpret_cast<void*>(&EmptyDebug));
-    FlushInstructionCache(GetCurrentProcess(), Image, nt->OptionalHeader.SizeOfImage);
+    Image[TestRva<0x1283830>()] = 0xC3;
+    Jump(TestRva<0x13B5490>(), reinterpret_cast<void*>(&CopyPosition));
+    Jump(TestRva<0x13B2C10>(), reinterpret_cast<void*>(&Noop));
+    Jump(TestRva<0x13B2D00>(), reinterpret_cast<void*>(&Noop));
+    Jump(TestRva<0x1A363B0>(), reinterpret_cast<void*>(&EmptyDebug));
+    FlushInstructionCache(GetCurrentProcess(), Image, imageSize);
 
     Setup();
     Damage = 20;
@@ -265,24 +279,24 @@ int main(int argc, char** argv)
     using SaveFn = void* (*)(void*, void*, void*);
     using LoadFn = void (*)(void*, void*, void*);
     uint8_t record[0xD8] = {};
-    alignas(16) uint8_t restored[0x2E68] = {};
+    alignas(16) uint8_t restored[0x2E70] = {};
     Setup();
     Attack(Group(0));
     CHECK(At<uint8_t>(Group(1), 0x110) && LeaderCalls == 1 && MemberCalls == 2);
-    reinterpret_cast<SaveFn>(Image + 0x13C8DB0)(Formation, record, Group(1));
+    reinterpret_cast<SaveFn>(Image + TestRva<0x13C8DB0>())(Formation, record, Group(1));
     CHECK(At<int>(record, 0) == 16 && Near(At<float>(record, 0x4C), 0));
     At<uint8_t>(restored, 0x1E8) = 2;
     At<int>(restored, 0x48) = -1;
-    reinterpret_cast<LoadFn>(Image + 0x13C90D0)(Formation, restored, record);
+    reinterpret_cast<LoadFn>(Image + TestRva<0x13C90D0>())(Formation, restored, record);
     CHECK(Near(At<float>(restored, 0x2DEC), 0) && !GroupAlive(restored));
     Setup();
     Damage = 20;
     Attack(Group(0));
-    reinterpret_cast<SaveFn>(Image + 0x13C8DB0)(Formation, record, Group(1));
+    reinterpret_cast<SaveFn>(Image + TestRva<0x13C8DB0>())(Formation, record, Group(1));
     memset(restored, 0, sizeof(restored));
     At<uint8_t>(restored, 0x1E8) = 2;
     At<int>(restored, 0x48) = -1;
-    reinterpret_cast<LoadFn>(Image + 0x13C90D0)(Formation, restored, record);
+    reinterpret_cast<LoadFn>(Image + TestRva<0x13C90D0>())(Formation, restored, record);
     CHECK(Near(At<float>(restored, 0x2DEC), 5) && GroupAlive(restored) && LeaderCalls == 0);
     printf("PASS: %d assertions against production off-screen damage and native defeat/save/load instructions.\n", Assertions);
     return 0;

@@ -94,7 +94,7 @@ public:
     bool material = false, committing = false, ready = false;
     GuardFusionInventory(bool source, int base = -1, bool commit = false) : baseId(base), material(source), committing(commit)
     {
-        void* manager = At<void*>(Image, 0xA9C50E0);
+        void* manager = At<void*>(Image, GameRva<0xA9C50E0>());
         if (!Readable(manager, 0xA0)) return;
         save = At<void*>(manager, 0x98);
         if (!Readable(save, 0x3C0)) { save = nullptr; return; }
@@ -166,7 +166,7 @@ static void* FusionMetadata(void* tile)
     const uint8_t item = At<uint8_t>(tile, 0);
     if (item < 200 || item >= 210) return OriginalFusionMetadata(tile);
     uint8_t id = static_cast<uint8_t>(item - 200);
-    void* guard = reinterpret_cast<FusionMetadataFn>(Image + 0x1465900)(&id);
+    void* guard = reinterpret_cast<FusionMetadataFn>(Image + GameRva<0x1465900>())(&id);
     if (!Readable(guard, 0x30)) return nullptr;
     static thread_local uint8_t metadata[10][0x20];
     auto* result = metadata[id];
@@ -203,7 +203,7 @@ static void* FusionIds(void* output, uint8_t character)
     }
     At<FusionArray>(output, 0) = {};
     using ReserveFn = void (*)(int, int, int, void*, int, int*);
-    if (count) reinterpret_cast<ReserveFn>(Image + 0x11F69B0)(1, 1, count, output, 0, &At<int>(output, 12));
+    if (count) reinterpret_cast<ReserveFn>(Image + GameRva<0x11F69B0>())(1, 1, count, output, 0, &At<int>(output, 12));
     auto& array = At<FusionArray>(output, 0);
     if (count) memcpy(array.data, ids, count);
     array.count = count;
@@ -298,8 +298,9 @@ static bool FusionUndo(void* widget)
 
 static void HideGuardFusionRows(void* detail, int slots)
 {
-    if (!Readable(detail, 0x390)) return;
-    const auto& rows = At<FusionArray>(detail, 0x380);
+    const auto selectedSlotOffset = FusionDetailSelectedSlotOffset();
+    if (!Readable(detail, selectedSlotOffset + sizeof(int))) return;
+    const auto& rows = At<FusionArray>(detail, FusionDetailRowsOffset());
     if (!FusionArrayReadable(rows, sizeof(void*), 10)) return;
     for (int i = 0; i < rows.count; ++i)
     {
@@ -310,7 +311,7 @@ static void HideGuardFusionRows(void* detail, int slots)
         if (!Readable(vtable, 0x2C8)) continue;
         reinterpret_cast<void (*)(void*, uint8_t)>(vtable[0x2C0 / 8])(row, 1);
     }
-    At<int>(detail, 0x394) = 1;
+    At<int>(detail, selectedSlotOffset) = 1;
 }
 
 static void FusionSetup(void* widget, int destination, int source, void* controller)
@@ -326,11 +327,11 @@ static void FusionSetup(void* widget, int destination, int source, void* control
     HideGuardFusionRows(At<void*>(widget, 0x350), inventory.weapons[source].skills.count < 3 ? inventory.weapons[source].skills.count : 3);
     HideGuardFusionRows(At<void*>(widget, 0x358), GuardFusionSlots);
     void* material = At<void*>(widget, 0x350);
-    if (controller && Readable(material, 0x390))
+    if (controller && Readable(material, FusionDetailRowsOffset() + sizeof(FusionArray)))
     {
-        const auto& rows = At<FusionArray>(material, 0x380);
+        const auto& rows = At<FusionArray>(material, FusionDetailRowsOffset());
         if (FusionArrayReadable(rows, sizeof(void*), 10) && rows.count > 1)
-            reinterpret_cast<void (*)(void*, void*)>(Image + 0x3E8EB00)(static_cast<void**>(rows.data)[1], controller);
+            reinterpret_cast<void (*)(void*, void*)>(Image + GameRva<0x3E8EB00>())(static_cast<void**>(rows.data)[1], controller);
     }
 }
 
@@ -355,7 +356,7 @@ static void FusionConfirm(void* widget)
     const int destination = At<int>(widget, 0x390), source = At<int>(widget, 0x3C0);
     GuardFusionInventory inventory(false, destination, true);
     if (!inventory.ready || destination < 0 || source < 0 || source >= inventory.count || destination == source || inventory.weapons[destination].id == 255 || inventory.weapons[source].id == 255) return;
-    void* save = At<void*>(At<void*>(Image, 0xA9C50E0), 0x98);
+    void* save = At<void*>(At<void*>(Image, GameRva<0xA9C50E0>()), 0x98);
     const auto& base = inventory.weapons[destination];
     const auto& donor = inventory.weapons[source];
     const auto& preview = At<FusionArray>(widget, 0x3D8);
@@ -365,7 +366,17 @@ static void FusionConfirm(void* widget)
     GuardFusionWidget = nullptr;
 }
 
-int WeaponFusionMenu(void* manager, bool toggle)
+static void RebuildFusionBase(void* selector)
+{
+    At<int>(selector, 0x410) = -1;
+    At<int>(selector, 0x414) = -1;
+    void* list = At<void*>(selector, 0x350);
+    // Discard the old inventory's selected row before native rebuilding.
+    if (Readable(list, 0x44C)) At<int>(list, 0x448) = INT32_MAX;
+    FusionBase(selector);
+}
+
+int WeaponFusionMenu(void* manager, bool toggle, int* stock)
 {
     if (!Config.enabled || !Config.weaponFusion || !Readable(manager, 0x520) || At<uint8_t>(manager, 0x491) != 2) return 0;
     void* selector = At<void*>(manager, 0x470);
@@ -382,13 +393,8 @@ int WeaponFusionMenu(void* manager, bool toggle)
             GuardFusionOfficer = At<uint8_t>(selector, 0x40C);
             GuardFusionSelector = selector;
         }
-        At<int>(selector, 0x410) = -1;
-        At<int>(selector, 0x414) = -1;
-        void* list = At<void*>(selector, 0x350);
-        // Discard the old inventory's selected row before native rebuilding;
-        // the native picker will focus the first item of the new inventory.
-        if (Readable(list, 0x44C)) At<int>(list, 0x448) = INT32_MAX;
-        FusionBase(selector);
+        RebuildFusionBase(selector);
     }
+    if (stock) *stock = At<int>(selector, 0x41C);
     return (GuardFusionSelector == selector ? 2 : 1) + (At<int>(selector, 0x408) == 1 ? 2 : 0);
 }

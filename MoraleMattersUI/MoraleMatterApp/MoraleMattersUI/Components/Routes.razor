@@ -1,4 +1,5 @@
 ﻿@using RoarUI.Theme
+@implements IDisposable
 @inject ThemeService ThemeService
 
 <GoRoar>
@@ -14,8 +15,8 @@
     protected override void OnInitialized()
     {
         var theme = new RoarTheme();
-        var brand = theme.Token.Variants[RoarVariant.Brand];
-        var color = theme.Token.Color;
+        var brand = theme.Tokens.Variants[RoarVariant.Brand];
+        var color = theme.Tokens;
 
         // Brand palette: lightest to darkest.
         brand.Color95 = "#F7F2FC";
@@ -33,25 +34,12 @@
         brand.Color = "var(--wa-color-brand-50)";
         brand.On = "#FFFFFF";
 
-        // Backgrounds.
-        brand.Light.FillQuiet = "var(--wa-color-brand-95)";
-        brand.Light.FillNormal = "var(--wa-color-brand-90)";
-        brand.Light.FillLoud = "var(--wa-color-brand-50)";
-
-        // Borders.
-        brand.Light.BorderQuiet = "var(--wa-color-brand-90)";
-        brand.Light.BorderNormal = "var(--wa-color-brand-80)";
-        brand.Light.BorderLoud = "var(--wa-color-brand-60)";
-
-        // Text and icons on the corresponding backgrounds.
-        brand.Light.OnQuiet = "var(--wa-color-brand-40)";
-        brand.Light.OnNormal = "var(--wa-color-brand-30)";
-        brand.Light.OnLoud = "#FFFFFF";
-
-        theme.Token.Light.TextLink = "var(--wa-color-brand-40)";
-        theme.Token.Light.Focus = "var(--wa-color-brand-50)";
-
-        ThemeService.Mode = AppInfo.Current.RequestedTheme is AppTheme.Dark ? "dark" : "light";
+        ApplyThemeMode(Application.Current.RequestedTheme);
         ThemeService.LoadTheme(theme);
+        Application.Current.RequestedThemeChanged += OnRequestedThemeChanged;
     }
+
+    private void OnRequestedThemeChanged(object? sender, AppThemeChangedEventArgs e) => _ = InvokeAsync(() => ApplyThemeMode(e.RequestedTheme));
+    private void ApplyThemeMode(AppTheme theme) => ThemeService.Mode = theme is AppTheme.Dark ? ThemeMode.Dark : ThemeMode.Light;
+    public void Dispose() => Application.Current.RequestedThemeChanged -= OnRequestedThemeChanged;
 }

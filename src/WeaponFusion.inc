@@ -9,6 +9,16 @@ struct WeaponFusionTile
     int32_t value;
 };
 static_assert(sizeof(WeaponFusionTile) == 8, "Native FEquipItemSaveData layout");
+static size_t FusionDetailRowsOffset()
+{
+    return ActiveGameBuild == GameBuild::Patch110 ? 0x388 : 0x380;
+}
+
+static size_t FusionDetailSelectedSlotOffset()
+{
+    return ActiveGameBuild == GameBuild::Patch110 ? 0x39C : 0x394;
+}
+
 #include "GuardWeaponFusion.inc"
 using WeaponFusionSelectFn = void (*)(void*);
 static WeaponFusionSelectFn OriginalWeaponFusionSelect = nullptr;
@@ -23,6 +33,8 @@ static int32_t WeaponFusionValue(const WeaponFusionTile& destination, const Weap
     const int64_t value = static_cast<int64_t>(destination.value) + Config.weaponFusionIncrement;
     return static_cast<int32_t>(value > INT32_MAX ? INT32_MAX : value);
 }
+
+#include "BodyguardFusion.inc"
 
 static void WeaponFusionSelect(void* widget)
 {
@@ -45,13 +57,14 @@ static void WeaponFusionSelect(void* widget)
     const int sourceSlot = At<int>(widget, 0x400);
     const int sourceCount = At<int>(widget, 0x3B0);
     const int destinationCount = At<int>(widget, 0x488);
-    if (!Readable(materialWidget, 0x398) || !Readable(resultWidget, 0x398) || sourceCount < 1 || sourceCount > 9 || destinationCount < 1 || destinationCount > 9 || sourceSlot < 1 || sourceSlot > sourceCount)
+    const auto selectedSlotOffset = FusionDetailSelectedSlotOffset();
+    if (!Readable(materialWidget, selectedSlotOffset + sizeof(int)) || !Readable(resultWidget, selectedSlotOffset + sizeof(int)) || sourceCount < 1 || sourceCount > 9 || destinationCount < 1 || destinationCount > 9 || sourceSlot < 1 || sourceSlot > sourceCount)
     {
         OriginalWeaponFusionSelect(widget);
         return;
     }
     const int sourceIndex = sourceSlot - 1;
-    const int destinationSlot = At<int>(resultWidget, 0x394);
+    const int destinationSlot = At<int>(resultWidget, selectedSlotOffset);
     auto* source = At<WeaponFusionTile*>(widget, 0x3A8);
     // Use the original destination snapshot, so changing a pending selection
     // cannot award multiple increments before a material is consumed.
@@ -73,8 +86,17 @@ static void WeaponFusionSelect(void* widget)
     // Native undo, duplicate-skill validation and final save/consumption stay intact.
     WeaponFusionTile preview[9];
     memcpy(preview, source, sourceCount * sizeof(WeaponFusionTile));
+    const auto donor = preview[sourceIndex];
+    const int original = destination[destinationIndex].value;
+    const bool bodyguard = widget == GuardFusionWidget;
     preview[sourceIndex].value = value;
     At<WeaponFusionTile*>(widget, 0x3A8) = preview;
     OriginalWeaponFusionSelect(widget);
     At<WeaponFusionTile*>(widget, 0x3A8) = source;
+    if (Config.liveEvidence)
+    {
+        const auto& result = At<FusionArray>(widget, 0x3D8);
+        if (FusionArrayReadable(result, sizeof(WeaponFusionTile), 9) && destinationIndex < result.count)
+            Log("Live evidence: %s fusion selection skill=%u donor=%d original=%d requested=%d actual=%d.", bodyguard ? "bodyguard" : "officer", static_cast<unsigned>(donor.item), donor.value, original, value, static_cast<WeaponFusionTile*>(result.data)[destinationIndex].value);
+    }
 }

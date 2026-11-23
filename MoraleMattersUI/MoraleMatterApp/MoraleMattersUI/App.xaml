@@ -11,16 +11,22 @@
                 please refer to the documentation:
                 https://go.microsoft.com/fwlink/?linkid=2282329
             -->
-            <TitleBar x:Key="AppTitleBar" Icon="morale_matters_icon.png" Title="Morale Matters UI" Subtitle="Detecting mod..." HeightRequest="48" BackgroundColor="#17141E" ForegroundColor="#F4F0F8">
+            <TitleBar x:Key="AppTitleBar" Icon="morale_matters_icon.png" Title="Morale Matters UI" Subtitle="Detecting mod..." HeightRequest="48" BackgroundColor="{AppThemeBinding Light=#F7F2FC, Dark=#17141E}" ForegroundColor="{AppThemeBinding Light=#32184E, Dark=#F4F0F8}">
                 <TitleBar.TrailingContent>
-                    <HorizontalStackLayout Spacing="6" Margin="12,0,16,0" VerticalOptions="Center">
-                        <HorizontalStackLayout.GestureRecognizers>
-                            <TapGestureRecognizer Tapped="OpenRoarUI" />
-                        </HorizontalStackLayout.GestureRecognizers>
+                    <HorizontalStackLayout Spacing="12" Margin="12,0,16,0" VerticalOptions="Center">
+                        <Button Text="{AppThemeBinding Light=&#x263E;, Dark=&#x2600;}" FontFamily="Segoe UI Symbol" FontSize="20" WidthRequest="32" HeightRequest="32" Padding="0" VerticalOptions="Center" BackgroundColor="Transparent" TextColor="{AppThemeBinding Light=#63309C, Dark=#CC91F3}"
+                                ToolTipProperties.Text="{AppThemeBinding Light='Switch to dark mode', Dark='Switch to light mode'}"
+                                SemanticProperties.Description="{AppThemeBinding Light='Switch to dark mode', Dark='Switch to light mode'}" Clicked="ToggleTheme" />
 
-                        <Label Text="Built with RoarUI" TextColor="#CC91F3" TextDecorations="Underline" FontSize="12" VerticalOptions="Center" InputTransparent="True" />
+                        <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
+                            <HorizontalStackLayout.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OpenRoarUI" />
+                            </HorizontalStackLayout.GestureRecognizers>
 
-                        <Image Source="logo_roarui.png" WidthRequest="36" HeightRequest="36" Aspect="AspectFit" VerticalOptions="Center" InputTransparent="True" />
+                            <Label Text="Built with RoarUI" TextColor="{AppThemeBinding Light=#63309C, Dark=#CC91F3}" TextDecorations="Underline" FontSize="12" VerticalOptions="Center" InputTransparent="True" />
+
+                            <Image Source="logo_roarui.png" WidthRequest="36" HeightRequest="36" Aspect="AspectFit" VerticalOptions="Center" InputTransparent="True" />
+                        </HorizontalStackLayout>
                     </HorizontalStackLayout>
                 </TitleBar.TrailingContent>
             </TitleBar>

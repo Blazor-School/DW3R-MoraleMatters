@@ -20,6 +20,7 @@ namespace MoraleMatters
     static unsigned long DamageEvents = 0;
     static unsigned long CasualtyEvents = 0;
     static unsigned long WaitEvents = 0;
+    static unsigned long BreakAttackDenials = 0;
     static bool EliteUnits[65536] = {};
     static ReinforcementState Reinforcements[MaxCorps];
     struct ArrivalState { int corps; int side; bool seen; bool pending; int wave; bool surprise; };
@@ -36,6 +37,11 @@ namespace MoraleMatters
     static int LinkCount = 0;
     static int WaveCount = 0;
     static int CurrentWaves[MaxCorps] = {};
+
+    static bool SampleLiveEvidence(volatile LONG& count)
+    {
+        return Config.liveEvidence && InterlockedIncrement(&count) <= 24;
+    }
 
     void ClassifyUnit(int unit, bool elite)
     {
@@ -54,6 +60,8 @@ namespace MoraleMatters
     static TickFn OriginalCorpsTick = nullptr;
     static TickFn OriginalAttackWait = nullptr;
     static TickFn OriginalSecondaryWait = nullptr;
+    using AttackTicketFn = bool (*)(void*);
+    static AttackTicketFn OriginalAttackTicket = nullptr;
     static AttackFn OriginalAttack = nullptr;
     static MoraleFn OriginalRaise = nullptr;
     static MoraleFn OriginalLower = nullptr;
@@ -62,6 +70,8 @@ namespace MoraleMatters
     static SpecialAttributeFn OriginalSpecialAttribute = nullptr;
     static ScenarioEffectFn OriginalScenarioEffect = nullptr;
     static void ResetBehavior();
+    static void ResetGuardPressure();
+    static bool TickGuardPressure(void* controller, float seconds);
     static void ResetArchers();
     static void ResetKillRewards();
     static void ResetExperience();
@@ -96,7 +106,7 @@ namespace MoraleMatters
         ObservedCorps = BattleManager ? At<int>(BattleManager, 0x70) : 0;
         ValidGroups = ObservedGroups;
         ValidCorps = ObservedCorps;
-        if (ValidGroups < 0 || ValidGroups > MaxGroups || !Readable(GroupStorage, static_cast<size_t>(ValidGroups) * 0x2E68))
+        if (ValidGroups < 0 || ValidGroups > MaxGroups || !Readable(GroupStorage, static_cast<size_t>(ValidGroups) * BattleGroupStride()))
             ValidGroups = 0;
         if (ValidCorps < 0 || ValidCorps > MaxCorps || !Readable(CorpsStorage, static_cast<size_t>(ValidCorps) * 0xEF8))
             ValidCorps = 0;
@@ -110,6 +120,7 @@ namespace MoraleMatters
         memset(Corps, 0, sizeof(Corps));
         memset(Encounters, 0, sizeof(Encounters));
         ResetBehavior();
+        ResetGuardPressure();
         ResetArchers();
         ResetKillRewards();
         ResetExperience();
@@ -124,7 +135,8 @@ namespace MoraleMatters
         {
             void* group = Group(id);
             const int attribute = At<uint8_t>(group, 0x2DFD);
-            Arrivals[id].seen = (attribute != 1 && attribute != 2) || At<uint8_t>(group, 0x110) || At<uint8_t>(group, 0x186);
+            // The game keeps dormant reserves inactive until their native spawn completes.
+            Arrivals[id].seen = (attribute != 1 && attribute != 2) || At<uint8_t>(group, 0x110);
         }
         EncounterLogged = false;
         Log("Battle state reset; groups=%d corps=%d.", GroupCount(), CorpsCount());
@@ -139,7 +151,7 @@ namespace MoraleMatters
 
     void* Group(int id)
     {
-        return id >= 0 && id < ValidGroups ? static_cast<uint8_t*>(GroupStorage) + static_cast<size_t>(id) * 0x2E68 : nullptr;
+        return id >= 0 && id < ValidGroups ? static_cast<uint8_t*>(GroupStorage) + static_cast<size_t>(id) * BattleGroupStride() : nullptr;
     }
 
     void* CorpsObject(int id)
@@ -162,7 +174,7 @@ namespace MoraleMatters
         if (!group || At<uint8_t>(group, 0x110) || At<uint8_t>(group, 0x186))
             return false;
         using IsDeadFn = bool (*)(void*);
-        return !reinterpret_cast<IsDeadFn>(Image + 0x13AE060)(group);
+        return !reinterpret_cast<IsDeadFn>(Image + GameRva<0x13AE060>())(group);
     }
 
     int GroupIdFromCharacter(void* character)
@@ -197,10 +209,33 @@ namespace MoraleMatters
 
     #include "Experience.inc"
     #include "Behavior.inc"
+    #include "GuardPressure.inc"
     #include "Archers.inc"
     #include "WeaponFusion.inc"
     #include "OnscreenCombat.inc"
     #include "Supplies.inc"
+
+    static bool BreakWithdraws(void* controller, void* character, void* group)
+    {
+        if (!CorpsBreakEnabled() || At<int>(character, 0x7A4) < 0)
+            return false;
+        const auto* formation = FormationBreakState(group);
+        const int id = At<int>(group, 0x3C);
+        if (!formation || (!formation->Withdrawing(id) && !formation->Rejoining(id)))
+            return false;
+        if (GuardTag && (GuardTag(character, 0xCE) || GuardTag(character, 0xCF) || GuardTag(character, 0xEA)))
+            return false;
+        void* target = ArcherTarget ? ArcherTarget(controller) : nullptr;
+        double from[3], to[3];
+        if (At<uint8_t>(group, 0x2D21) == 1 && target && !At<uint8_t>(target, 0x787) &&
+            GuardPosition(character, from) && GuardPosition(target, to))
+        {
+            const double x = from[0] - to[0], y = from[1] - to[1], z = from[2] - to[2];
+            if (x * x + y * y + z * z <= 400 * 400)
+                return false; // Let native defense run when there is no room to withdraw.
+        }
+        return true;
+    }
 
     int UpdateCharacterRates(void* manager, int* supportIndices, int capacity)
     {
@@ -334,6 +369,8 @@ namespace MoraleMatters
             auto* args = At<int*>(effect, 0x20);
             if (Readable(args, 12))
             {
+                if (Config.liveEvidence)
+                    Log("Live evidence: scenario arrival command paragraph=%d effect=%d side=%d selector=%d argument=%d.", cause, type, args[0], args[1], args[2]);
                 int selected = -1;
                 for (int id = 0; id < GroupCount(); ++id)
                 {
@@ -411,7 +448,8 @@ namespace MoraleMatters
         const bool scriptedReinforcement = attribute == 2 && id >= 0 && id < GroupCount() && Group(id) == group && GroupEvents[id].known;
         const bool surprise = Config.surpriseForces && (attribute == 1 || scriptedReinforcement);
         const bool enabled = surprise || (attribute == 2 && Config.reinforcements);
-        const bool candidate = enabled && id >= 0 && id < GroupCount() && Group(id) == group && corps >= 0 && corps < CorpsCount() && side >= 0 && side < 2 && side == At<int>(CorpsObject(corps), 0xC) && !Arrivals[id].seen && value == 0 && !At<uint8_t>(group, 0x110) && !At<uint8_t>(group, 0x186);
+        const bool activating = !At<uint8_t>(group, 0x186) || At<uint8_t>(group, 0x191) || At<uint8_t>(group, 0x192);
+        const bool candidate = enabled && id >= 0 && id < GroupCount() && Group(id) == group && corps >= 0 && corps < CorpsCount() && side >= 0 && side < 2 && side == At<int>(CorpsObject(corps), 0xC) && !Arrivals[id].seen && value == 0 && !At<uint8_t>(group, 0x110) && activating;
         if (candidate)
         {
             Arrivals[id].seen = true; // Before the recursive native setter visits children.
@@ -423,6 +461,9 @@ namespace MoraleMatters
                 Reinforcements[corps].Begin(CorpsSoldiers(corps), Config);
                 CurrentWaves[corps] = WaveCount < MaxGroups ? WaveCount++ : -1;
             }
+            static volatile LONG evidence = 0;
+            if (SampleLiveEvidence(evidence))
+                Log("Live evidence: reserve activation group=%d corps=%d attribute=%d inactive=%d surprise=%d.", id, corps, attribute, At<uint8_t>(group, 0x186), surprise);
         }
         OriginalSpecialAttribute(group, value);
         if (candidate && At<uint8_t>(group, 0x2DFD) == 0)
@@ -446,9 +487,9 @@ namespace MoraleMatters
             if (!arrival.pending || arrival.corps != corps)
                 continue;
             void* group = Group(id);
-            if (At<int>(group, 0x38) != corps || At<int>(group, 0x40) != arrival.side || At<int>(CorpsObject(corps), 0xC) != arrival.side || At<uint8_t>(group, 0x110) || At<uint8_t>(group, 0x186) || At<uint8_t>(group, 0x198) || At<uint8_t>(group, 0x2DFD) != 0)
+            if (At<int>(group, 0x38) != corps || At<int>(group, 0x40) != arrival.side || At<int>(CorpsObject(corps), 0xC) != arrival.side || At<uint8_t>(group, 0x110) || At<uint8_t>(group, 0x198) || At<uint8_t>(group, 0x2DFD) != 0)
                 arrival.pending = false;
-            else if (!At<uint8_t>(group, 0x191) && GroupAlive(group))
+            else if (!At<uint8_t>(group, 0x186) && !At<uint8_t>(group, 0x191) && GroupAlive(group))
             {
                 wave.Arrive(SoldierCount(group), Config, arrival.surprise);
                 if (!GroupEvents[id].known)
@@ -545,6 +586,8 @@ namespace MoraleMatters
         const float before = morale;
         state.SetProximity(morale, nearby, Config);
         RecordMorale(id, nearby ? MoraleReason::EnemyProximity : MoraleReason::EnemySeparated, morale - before);
+        if (Config.liveEvidence && morale != before)
+            Log("Live evidence: enemy corps proximity corps=%d nearby=%d morale=%.2f -> %.2f.", id, nearby, before, morale);
     }
 
     static void CorpsTick(void* object, float dt)
@@ -578,6 +621,7 @@ namespace MoraleMatters
             if (Config.reinforcements || Config.surpriseForces)
                 UpdateReinforcements(id, dt, morale);
             UpdateCorpsBehavior(id, dt, morale);
+            UpdateFormationBreak(id, dt, morale);
         }
     }
 
@@ -621,6 +665,7 @@ namespace MoraleMatters
         if (id >= 0 && id < MaxGroups && isfinite(dt) && dt > 0)
         {
             Encounters[id].Advance(dt);
+            GuardPulseCooldown[id] = fmaxf(0, GuardPulseCooldown[id] - dt);
             const int attribute = At<uint8_t>(object, 0x2DFD);
             if (!Arrivals[id].pending && attribute != 1 && attribute != 2)
                 Arrivals[id].seen = true;
@@ -733,7 +778,7 @@ namespace MoraleMatters
     {
         // Match GetOwnerCharacter: resolve its weak owner, not GetTargetActor's target.
         using OwnerFn = void* (*)(void*);
-        void* owner = reinterpret_cast<OwnerFn>(Image + 0x1E291F0)(static_cast<uint8_t*>(controller) + 0x3DC);
+        void* owner = reinterpret_cast<OwnerFn>(Image + GameRva<0x1E291F0>())(static_cast<uint8_t*>(controller) + 0x3DC);
         if (!Readable(owner, 0x7A8) || At<uint8_t>(owner, 0x74C) < 2)
             return 1;
         const int id = At<int>(owner, 0x7A0);
@@ -762,6 +807,18 @@ namespace MoraleMatters
     }
 
     static void SecondaryWait(void* controller, float seconds) { OriginalSecondaryWait(controller, WaitDepth ? seconds : AdjustWait(controller, seconds)); }
+
+    static bool RequestAttackTicket(void* controller)
+    {
+        if (!BreakSuppressesAttack(controller))
+            return OriginalAttackTicket(controller);
+        // Use the native release path so an old ticket does not starve other troops.
+        if (At<int>(controller, 0x3F0) || At<int>(controller, 0x3F8))
+            OriginalAttackWait(controller, 0);
+        if (++BreakAttackDenials <= 5)
+            Log("Formation break denied an infantry attack ticket.");
+        return false;
+    }
 
     float Encounter(int id, float distance, float hp, float maximum, bool& rallied)
     {
@@ -799,8 +856,8 @@ namespace MoraleMatters
         // The game's own setter updates the appropriate store and the cached value.
         using SetFn = void (*)(void*, float);
         using GetFn = float (*)(void*);
-        reinterpret_cast<SetFn>(Image + 0x1748200)(character, value);
-        if (fabsf(reinterpret_cast<GetFn>(Image + 0x17481D0)(character) - value) > 0.1f)
+        reinterpret_cast<SetFn>(Image + GameRva<0x1748200>())(character, value);
+        if (fabsf(reinterpret_cast<GetFn>(Image + GameRva<0x17481D0>())(character) - value) > 0.1f)
             return false;
         void* group = Group(GroupIdFromCharacter(character));
         if (group && MemberIdFromCharacter(character) == -1)
@@ -817,51 +874,61 @@ namespace MoraleMatters
 
     bool InitializeGameHooks()
     {
-        NativeGroupDefeat = reinterpret_cast<GroupDefeatFn>(Image + 0x13B11E0);
-        SetBehaviorStatus = reinterpret_cast<StatusFn>(Image + 0x13CFE30);
-        BehaviorOwner = reinterpret_cast<OwnerFn>(Image + 0x1E291F0);
-        BehaviorStopped = reinterpret_cast<BlackboardBoolFn>(Image + 0x13DD280);
-        ArcherTarget = reinterpret_cast<ArcherTargetFn>(Image + 0x13CE5E0);
-        ArcherInRange = reinterpret_cast<ArcherRangeFn>(Image + 0x13D6B80);
-        ArcherSetTarget = reinterpret_cast<ArcherSetFn>(Image + 0x13CE640);
+        NativeGroupDefeat = reinterpret_cast<GroupDefeatFn>(Image + GameRva<0x13B11E0>());
+        SetBehaviorStatus = reinterpret_cast<StatusFn>(Image + GameRva<0x13CFE30>());
+        BehaviorOwner = reinterpret_cast<OwnerFn>(Image + GameRva<0x1E291F0>());
+        BehaviorStopped = reinterpret_cast<BlackboardBoolFn>(Image + GameRva<0x13DD280>());
+        EndInfantryAbility = reinterpret_cast<EndAbilityFn>(Image + GameRva<0x152D920>());
+        AttackAbilityTag = reinterpret_cast<const uint64_t*>(Image + GameRva<0xA9C5250>()); // Ability.Action.Attack
+        StanceAbilityTag = reinterpret_cast<const uint64_t*>(Image + GameRva<0xA9C54F0>()); // Ability.Action.Stance
+        GuardTag = reinterpret_cast<GuardTagFn>(Image + GameRva<0x1746710>());
+        GuardAbility = reinterpret_cast<GuardAbilityFn>(Image + GameRva<0x175AFC0>());
+        ArcherTarget = reinterpret_cast<ArcherTargetFn>(Image + GameRva<0x13CE5E0>());
+        ArcherInRange = reinterpret_cast<ArcherRangeFn>(Image + GameRva<0x13D6B80>());
+        ArcherSetTarget = reinterpret_cast<ArcherSetFn>(Image + GameRva<0x13CE640>());
         ArcherRandomState ^= static_cast<uint32_t>(GetTickCount64());
         if (!ArcherRandomState) ArcherRandomState = 1;
         HookSpec hooks[] = {
-            {0x16963C0, reinterpret_cast<void*>(&FusionInit), reinterpret_cast<void**>(&OriginalFusionInit)},
-            {0x1696920, reinterpret_cast<void*>(&FusionBase), reinterpret_cast<void**>(&OriginalFusionBase)},
-            {0x1697A10, reinterpret_cast<void*>(&FusionClick), reinterpret_cast<void**>(&OriginalFusionClick)},
-            {0x169A2D0, reinterpret_cast<void*>(&FusionUndo), reinterpret_cast<void**>(&OriginalFusionUndo)},
-            {0x1696EE0, reinterpret_cast<void*>(&FusionSource), reinterpret_cast<void**>(&OriginalFusionSource)},
-            {0x1697770, reinterpret_cast<void*>(&FusionProgressAll), reinterpret_cast<void**>(&OriginalFusionProgressAll)},
-            {0x1697360, reinterpret_cast<void*>(&FusionProgress), reinterpret_cast<void**>(&OriginalFusionProgress)},
-            {0x1536630, reinterpret_cast<void*>(&FusionIds), reinterpret_cast<void**>(&OriginalFusionIds)},
-            {0x1536880, reinterpret_cast<void*>(&FusionCompatible), reinterpret_cast<void**>(&OriginalFusionCompatible)},
-            {0x1463840, reinterpret_cast<void*>(&FusionMetadata), reinterpret_cast<void**>(&OriginalFusionMetadata)},
-            {0x14BEEB0, reinterpret_cast<void*>(&FusionRank), reinterpret_cast<void**>(&OriginalFusionRank)},
-            {0x16985E0, reinterpret_cast<void*>(&FusionSetup), reinterpret_cast<void**>(&OriginalFusionSetup)},
-            {0x16990F0, reinterpret_cast<void*>(&FusionConfirm), reinterpret_cast<void**>(&OriginalFusionConfirm)},
-            {0x1517360, reinterpret_cast<void*>(&FusionCommit), reinterpret_cast<void**>(&OriginalFusionCommit)},
-            {0x1699750, reinterpret_cast<void*>(&WeaponFusionSelect), reinterpret_cast<void**>(&OriginalWeaponFusionSelect)},
-            {0x13D43E0, reinterpret_cast<void*>(&ArcherPriority), reinterpret_cast<void**>(&OriginalArcherPriority)},
-            {0x13D6E60, reinterpret_cast<void*>(&ArcherResolve), reinterpret_cast<void**>(&OriginalArcherResolve)},
-            {0x13D77D0, reinterpret_cast<void*>(&ArcherAssign), reinterpret_cast<void**>(&OriginalArcherAssign)},
-            {0x13978F0, reinterpret_cast<void*>(&ArcherHit), reinterpret_cast<void**>(&OriginalArcherHit)},
-            {0x13A1C80, reinterpret_cast<void*>(&CorpsTick), reinterpret_cast<void**>(&OriginalCorpsTick)},
-            {0x13A5570, reinterpret_cast<void*>(&GroupTick), reinterpret_cast<void**>(&OriginalGroupTick)},
-            {0x13AB0C0, reinterpret_cast<void*>(&Attack), reinterpret_cast<void**>(&OriginalAttack)},
-            {0x13A27E0, reinterpret_cast<void*>(&Raise), reinterpret_cast<void**>(&OriginalRaise)},
-            {0x13A2B80, reinterpret_cast<void*>(&Lower), reinterpret_cast<void**>(&OriginalLower)},
-            {0x13AEF80, reinterpret_cast<void*>(&Kill), reinterpret_cast<void**>(&OriginalKill)},
-            {0x13D0120, reinterpret_cast<void*>(&AttackWait), reinterpret_cast<void**>(&OriginalAttackWait)},
-            {0x13D0200, reinterpret_cast<void*>(&SecondaryWait), reinterpret_cast<void**>(&OriginalSecondaryWait)},
-            {0x13B2D80, reinterpret_cast<void*>(&MoraleMattersSpecialEntry), reinterpret_cast<void**>(&OriginalSpecialAttribute)},
-            {0x1562680, reinterpret_cast<void*>(&ScenarioEffect), reinterpret_cast<void**>(&OriginalScenarioEffect)},
-            {0x13DBC20, reinterpret_cast<void*>(&BehaviorTick), reinterpret_cast<void**>(&OriginalBehaviorTick)},
-            {0x13B1A30, reinterpret_cast<void*>(&FormationOffset), reinterpret_cast<void**>(&OriginalFormationOffset)},
-            {0x13AB470, reinterpret_cast<void*>(&OffscreenCasualties), reinterpret_cast<void**>(&OriginalOffscreenCasualties)},
-            {0x1534B60, reinterpret_cast<void*>(&OnscreenHit), reinterpret_cast<void**>(&OriginalOnscreenHit)},
-            {0x1377DF0, reinterpret_cast<void*>(&RequestDrop), reinterpret_cast<void**>(&OriginalRequestDrop)},
-            {0x1749490, reinterpret_cast<void*>(&DropCombo), reinterpret_cast<void**>(&OriginalDropCombo)}
+            {GameRva<0x1641D20>(), reinterpret_cast<void*>(&SelectEquipment), reinterpret_cast<void**>(&OriginalSelectEquipment)},
+            {GameRva<0x1646040>(), reinterpret_cast<void*>(&EquipmentFocus), reinterpret_cast<void**>(&OriginalEquipmentFocus)},
+            {GameRva<0x16963C0>(), reinterpret_cast<void*>(&FusionInit), reinterpret_cast<void**>(&OriginalFusionInit)},
+            {GameRva<0x1696920>(), reinterpret_cast<void*>(&FusionBase), reinterpret_cast<void**>(&OriginalFusionBase)},
+            {GameRva<0x1697A10>(), reinterpret_cast<void*>(&FusionClick), reinterpret_cast<void**>(&OriginalFusionClick)},
+            {GameRva<0x169A2D0>(), reinterpret_cast<void*>(&FusionUndo), reinterpret_cast<void**>(&OriginalFusionUndo)},
+            {GameRva<0x1696EE0>(), reinterpret_cast<void*>(&FusionSource), reinterpret_cast<void**>(&OriginalFusionSource)},
+            {GameRva<0x1697770>(), reinterpret_cast<void*>(&FusionProgressAll), reinterpret_cast<void**>(&OriginalFusionProgressAll)},
+            {GameRva<0x1697360>(), reinterpret_cast<void*>(&FusionProgress), reinterpret_cast<void**>(&OriginalFusionProgress)},
+            {GameRva<0x1536630>(), reinterpret_cast<void*>(&FusionIds), reinterpret_cast<void**>(&OriginalFusionIds)},
+            {GameRva<0x1536880>(), reinterpret_cast<void*>(&FusionCompatible), reinterpret_cast<void**>(&OriginalFusionCompatible)},
+            {GameRva<0x1463840>(), reinterpret_cast<void*>(&FusionMetadata), reinterpret_cast<void**>(&OriginalFusionMetadata)},
+            {GameRva<0x14BEEB0>(), reinterpret_cast<void*>(&FusionRank), reinterpret_cast<void**>(&OriginalFusionRank)},
+            {GameRva<0x16985E0>(), reinterpret_cast<void*>(&FusionSetup), reinterpret_cast<void**>(&OriginalFusionSetup)},
+            {GameRva<0x16990F0>(), reinterpret_cast<void*>(&FusionConfirm), reinterpret_cast<void**>(&OriginalFusionConfirm)},
+            {GameRva<0x1517360>(), reinterpret_cast<void*>(&FusionCommit), reinterpret_cast<void**>(&OriginalFusionCommit)},
+            {GameRva<0x1699750>(), reinterpret_cast<void*>(&WeaponFusionSelect), reinterpret_cast<void**>(&OriginalWeaponFusionSelect)},
+            {GameRva<0x13D43E0>(), reinterpret_cast<void*>(&ArcherPriority), reinterpret_cast<void**>(&OriginalArcherPriority)},
+            {GameRva<0x13D6E60>(), reinterpret_cast<void*>(&ArcherResolve), reinterpret_cast<void**>(&OriginalArcherResolve)},
+            {GameRva<0x13D77D0>(), reinterpret_cast<void*>(&ArcherAssign), reinterpret_cast<void**>(&OriginalArcherAssign)},
+            {GameRva<0x13978F0>(), reinterpret_cast<void*>(&ArcherHit), reinterpret_cast<void**>(&OriginalArcherHit)},
+            {GameRva<0x1397DF6>(), reinterpret_cast<void*>(&GuardDecisionEntry), reinterpret_cast<void**>(&OriginalGuardDecision)},
+            {GameRva<0x13A1C80>(), reinterpret_cast<void*>(&CorpsTick), reinterpret_cast<void**>(&OriginalCorpsTick)},
+            {GameRva<0x13A5570>(), reinterpret_cast<void*>(&GroupTick), reinterpret_cast<void**>(&OriginalGroupTick)},
+            {GameRva<0x13AB0C0>(), reinterpret_cast<void*>(&Attack), reinterpret_cast<void**>(&OriginalAttack)},
+            {GameRva<0x13A27E0>(), reinterpret_cast<void*>(&Raise), reinterpret_cast<void**>(&OriginalRaise)},
+            {GameRva<0x13A2B80>(), reinterpret_cast<void*>(&Lower), reinterpret_cast<void**>(&OriginalLower)},
+            {GameRva<0x13AEF80>(), reinterpret_cast<void*>(&Kill), reinterpret_cast<void**>(&OriginalKill)},
+            {GameRva<0x13D0120>(), reinterpret_cast<void*>(&AttackWait), reinterpret_cast<void**>(&OriginalAttackWait)},
+            {GameRva<0x13D0200>(), reinterpret_cast<void*>(&SecondaryWait), reinterpret_cast<void**>(&OriginalSecondaryWait)},
+            {GameRva<0x13CFED0>(), reinterpret_cast<void*>(&RequestAttackTicket), reinterpret_cast<void**>(&OriginalAttackTicket)},
+            {GameRva<0x50CA770>(), reinterpret_cast<void*>(&ActivateAbility), reinterpret_cast<void**>(&OriginalActivateAbility)},
+            {GameRva<0x13B2D80>(), reinterpret_cast<void*>(&MoraleMattersSpecialEntry), reinterpret_cast<void**>(&OriginalSpecialAttribute)},
+            {GameRva<0x1562680>(), reinterpret_cast<void*>(&ScenarioEffect), reinterpret_cast<void**>(&OriginalScenarioEffect)},
+            {GameRva<0x13DBC20>(), reinterpret_cast<void*>(&BehaviorTick), reinterpret_cast<void**>(&OriginalBehaviorTick)},
+            {GameRva<0x13B1A30>(), reinterpret_cast<void*>(&FormationOffset), reinterpret_cast<void**>(&OriginalFormationOffset)},
+            {GameRva<0x13AB470>(), reinterpret_cast<void*>(&OffscreenCasualties), reinterpret_cast<void**>(&OriginalOffscreenCasualties)},
+            {GameRva<0x1534B60>(), reinterpret_cast<void*>(&OnscreenHit), reinterpret_cast<void**>(&OriginalOnscreenHit)},
+            {GameRva<0x1377DF0>(), reinterpret_cast<void*>(&RequestDrop), reinterpret_cast<void**>(&OriginalRequestDrop)},
+            {GameRva<0x1749490>(), reinterpret_cast<void*>(&DropCombo), reinterpret_cast<void**>(&OriginalDropCombo)}
         };
         if (MH_Initialize() != MH_OK)
             return false;
@@ -880,7 +947,7 @@ namespace MoraleMatters
             MH_Uninitialize();
             return false;
         }
-        Log("ACTIVE: thirty-five native hooks installed, including officer/bodyguard weapon fusion, random archer targeting, archer damage taken, configurable combo drops, per-hit on-screen damage, corps, groups, morale, casualties, attack waits, arrivals, AI decisions, formation cohesion and off-screen kill rewards.");
+        Log("ACTIVE: %zu native hooks installed, including guard pressure, formation break and rally, weapon fusion, archer behavior, drops, combat, morale and off-screen kill rewards.", sizeof(hooks) / sizeof(hooks[0]));
         return true;
     }
 }

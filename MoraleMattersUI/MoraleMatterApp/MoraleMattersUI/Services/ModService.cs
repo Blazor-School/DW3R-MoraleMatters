@@ -1,4 +1,4 @@
-﻿using MoraleMattersUI.Forms;
+using MoraleMattersUI.Forms;
 using Roar.DependencyInjection;
 using System.Globalization;
 using System.IO.Compression;
@@ -29,7 +29,8 @@ public class ModService(VelopackLogger VelopackLogger)
         ["61E89BFFF77A211A36DC7A4C753C2E4C713FBAC815C21A023C16B369A32C2FA7"] = "1.7.3",
         ["58396C9A8C7BF2325C3C52B91217D7D1DDD79CB6FCD7911EB1A66EBF7BF3FC98"] = "1.8.0",
         ["6EE18A5DE33FFD9ACA64408B56E8C0E37AC8C20CD76395231EF7EE711885B419"] = "1.8.1",
-        ["7F8765D3461991A086E6341541CFDBD8C0F09C4115EBA4B16D2C8B982D33BE37"] = "1.8.2"
+        ["7F8765D3461991A086E6341541CFDBD8C0F09C4115EBA4B16D2C8B982D33BE37"] = "1.8.2",
+        ["F54313515EA082C811C0D353D5BA03086FBCEF13707FD09ABD6D2ED78CC37D0D"] = "1.9.0"
     };
 
     private const string _appId = "MoraleMatters";
@@ -82,12 +83,23 @@ public class ModService(VelopackLogger VelopackLogger)
             File.Copy(sourceFile, destinationFile, overwrite: true);
         }
 
+        string sourcePaks = Path.GetFullPath(Path.Combine(sourceFolder, "..", "..", "Content", "Paks"));
+        string gamePaks = Path.GetFullPath(Path.Combine(gamePath, "..", "..", "Content", "Paks"));
+        if (Directory.Exists(sourcePaks))
+        {
+            Directory.CreateDirectory(gamePaks);
+            foreach (string sourceFile in Directory.EnumerateFiles(sourcePaks, "MoraleStationary_P.*"))
+            {
+                File.Copy(sourceFile, Path.Combine(gamePaks, Path.GetFileName(sourceFile)), overwrite: true);
+            }
+        }
+
         Directory.Delete(tempFolder, recursive: true);
     }
 
     public async Task SaveModSettingsAsync(string gamePath, ModSettingForm settings)
     {
-        string[] sections = ["General", "OffscreenKillRewards", "Offscreen", "Reinforcements", "SurpriseForces", "Drops", "WeaponFusion", "Archers", "EnemyProximity", "Behavior", "Support", "Casualties", "Combat", "HUD", "Battlefield", "Rescue", "Report"];
+        string[] sections = ["General", "OffscreenKillRewards", "Offscreen", "Reinforcements", "SurpriseForces", "Drops", "WeaponFusion", "Archers", "EnemyProximity", "GuardPressure", "Behavior", "Support", "Casualties", "Combat", "HUD", "Battlefield", "Rescue", "Report"];
         var groups = typeof(ModSettingForm).GetProperties().GroupBy(property => sections.First(section => property.Name.StartsWith(section, StringComparison.Ordinal)));
         var content = new StringBuilder();
 

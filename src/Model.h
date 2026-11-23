@@ -38,6 +38,7 @@ namespace MoraleMatters
     struct Settings
     {
         bool enabled = true;
+        bool liveEvidence = false;
         bool offscreen = true;
         bool support = true;
         bool casualties = true;
