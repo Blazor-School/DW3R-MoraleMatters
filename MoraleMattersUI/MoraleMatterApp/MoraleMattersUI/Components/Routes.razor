@@ -1,4 +1,5 @@
 ﻿@using RoarUI.Theme
+@implements IDisposable
 @inject ThemeService ThemeService
 
 <GoRoar>
@@ -51,7 +52,12 @@
         theme.Tokens.Light.TextLink = "var(--wa-color-brand-40)";
         theme.Tokens.Light.Focus = "var(--wa-color-brand-50)";
 
-        ThemeService.Mode = AppInfo.Current.RequestedTheme is AppTheme.Dark ? ThemeMode.Dark : ThemeMode.Light;
+        ApplyThemeMode(Application.Current.RequestedTheme);
         ThemeService.LoadTheme(theme);
+        Application.Current.RequestedThemeChanged += OnRequestedThemeChanged;
     }
+
+    private void OnRequestedThemeChanged(object? sender, AppThemeChangedEventArgs e) => _ = InvokeAsync(() => ApplyThemeMode(e.RequestedTheme));
+    private void ApplyThemeMode(AppTheme theme) => ThemeService.Mode = theme is AppTheme.Dark ? ThemeMode.Dark : ThemeMode.Light;
+    public void Dispose() => Application.Current.RequestedThemeChanged -= OnRequestedThemeChanged;
 }
