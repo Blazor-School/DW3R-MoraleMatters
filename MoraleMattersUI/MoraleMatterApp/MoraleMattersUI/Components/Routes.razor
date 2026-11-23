@@ -14,8 +14,8 @@
     protected override void OnInitialized()
     {
         var theme = new RoarTheme();
-        var brand = theme.Token.Variants[RoarVariant.Brand];
-        var color = theme.Token.Color;
+        var brand = theme.Tokens.Variants[RoarVariant.Brand];
+        var color = theme.Tokens;
 
         // Brand palette: lightest to darkest.
         brand.Color95 = "#F7F2FC";
@@ -48,10 +48,10 @@
         brand.Light.OnNormal = "var(--wa-color-brand-30)";
         brand.Light.OnLoud = "#FFFFFF";
 
-        theme.Token.Light.TextLink = "var(--wa-color-brand-40)";
-        theme.Token.Light.Focus = "var(--wa-color-brand-50)";
+        theme.Tokens.Light.TextLink = "var(--wa-color-brand-40)";
+        theme.Tokens.Light.Focus = "var(--wa-color-brand-50)";
 
-        ThemeService.Mode = AppInfo.Current.RequestedTheme is AppTheme.Dark ? "dark" : "light";
+        ThemeService.Mode = AppInfo.Current.RequestedTheme is AppTheme.Dark ? ThemeMode.Dark : ThemeMode.Light;
         ThemeService.LoadTheme(theme);
     }
 }

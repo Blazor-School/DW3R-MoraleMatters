@@ -20,7 +20,7 @@
         <RoarCard Appreance="CardAppreance.FilledOutlined">
             <DataAnnotationsValidator />
             <div class="wa-cluster wa-flex-nowrap">
-                <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="folder" />
+                <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CurrentTheme.Tokens.Variants[RoarVariant.Brand].Color" Name="folder" />
                 <label>Game folder</label>
                 <RoarInputText style="flex-grow: 1" @bind-Value="GameFolderForm.GamePath" ReadOnly />
                 <RoarButton @onclick="BrowseGameFolderAsync" Variant="ButtonVariant.Brand">Browse</RoarButton>
@@ -31,14 +31,14 @@
     <div class="wa-flank:end wa-align-items-stretch wa-flex-nowrap" style="--flank-size: 30rem; flex: 1; min-height: 0;">
         <RoarCard class="settings-card" Appreance="CardAppreance.FilledOutlined">
             <div class="wa-flank" style="flex-shrink: 0;">
-                <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="gear" />
+                <RoarIcon Size="@IconSize.L" Color="@ThemeService.CurrentTheme.Tokens.Variants[RoarVariant.Brand].Color" Name="gear" />
                 <div class="wa-heading-xl">Mod Settings</div>
             </div>
 
             @if (string.IsNullOrEmpty(LocalModVersion))
             {
                 <div class="wa-stack wa-text-center wa-align-items-center wa-justify-content-center wa-gap-l" style="flex: 1; min-height: 0; overflow-y: auto;">
-                    <RoarIcon Name="sliders" class="wa-border-radius-l" style="font-size: 3rem;" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" />
+                    <RoarIcon Name="sliders" class="wa-border-radius-l" style="font-size: 3rem;" Color="@ThemeService.CurrentTheme.Tokens.Variants[RoarVariant.Brand].Color" />
 
                     <div class="wa-heading-l">Install MoraleMatters to get started</div>
 
@@ -936,7 +936,7 @@
         <div class="wa-stack" style="min-height: 0; overflow-y: auto;">
             <RoarCard Orientation="CardOrientation.Vertical" Appreance="CardAppreance.FilledOutlined">
                 <div class="wa-flank">
-                    <RoarIcon Size="@IconSize.L" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Brand].Color" Name="download" />
+                    <RoarIcon Size="@IconSize.L" Color="@ThemeService.CurrentTheme.Tokens.Variants[RoarVariant.Brand].Color" Name="download" />
                     <div class="wa-split">
                         <div class="wa-heading-xl">Mod Installation</div>
 
@@ -983,7 +983,7 @@
             <RoarCard Orientation="CardOrientation.Vertical" Appreance="CardAppreance.FilledOutlined">
                 <div class="wa-stack">
                     <div class="wa-flank">
-                        <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CustomTheme.Token.Variants[RoarVariant.Warning].Color" Name="circle-info" />
+                        <RoarIcon Size="@IconSize.XL" Color="@ThemeService.CurrentTheme.Tokens.Variants[RoarVariant.Warning].Color" Name="circle-info" />
                         <div class="wa-body-m">Keep the game closed during installion.</div>
                     </div>
                     <div class="wa-flank">
@@ -1043,7 +1043,7 @@
     {
         if (Application.Current is App app)
         {
-            if (!GameFolderEditContext.Validate())
+            if (!await GameFolderEditContext.ValidateAsync())
             {
                 app.TitleBar.Subtitle = "Game not found.";
             }
@@ -1096,21 +1096,31 @@
 
     public async Task SaveSettingAsync()
     {
-        if (SettingEditContext.Validate())
+        try
         {
-            await ModService.SaveModSettingsAsync(GameFolderForm.GamePath, SettingForm);
-            await Toast.CreateAsync("Save successfully. Take effect after restarting the game.", new()
+            if (await SettingEditContext.ValidateAsync())
             {
-                Variant = ToastVariant.Success,
-            });
-            SettingEditContext.MarkAsUnmodified();
+                await ModService.SaveModSettingsAsync(GameFolderForm.GamePath, SettingForm);
+                await Toast.CreateAsync("Save successfully. Take effect after restarting the game.", new()
+                    {
+                        Variant = ToastVariant.Success,
+                    });
+                SettingEditContext.MarkAsUnmodified();
+            }
+            else
+            {
+                await Toast.CreateAsync("Settings contain invalid values", new()
+                    {
+                        Variant = ToastVariant.Danger,
+                    });
+            }
         }
-        else
+        catch (Exception ex)
         {
-            await Toast.CreateAsync("Settings contain invalid values", new()
-            {
-                Variant = ToastVariant.Danger,
-            });
+            await Toast.CreateAsync($"Failed to save settings: {ex.Message}", new()
+                {
+                    Variant = ToastVariant.Danger,
+                });
         }
     }
 }
